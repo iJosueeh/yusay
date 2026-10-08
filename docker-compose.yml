@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: yusay-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yusay}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_dev_password}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - yusay-network
+
+  flyway:
+    image: flyway/flyway:latest
+    container_name: yusay-flyway
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    environment:
+      FLYWAY_URL: ${FLYWAY_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-yusay}}
+      FLYWAY_USER: ${DB_USER:-yusay_migrator}
+      FLYWAY_PASSWORD: ${DB_PASSWORD:-postgres_dev_password}
+      FLYWAY_SCHEMAS: ${FLYWAY_SCHEMAS:-yusay}
+      FLYWAY_DEFAULT_SCHEMA: ${FLYWAY_DEFAULT_SCHEMA:-yusay}
+      FLYWAY_CONNECT_RETRIES: 10
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
+    volumes:
+      - ./database/migrations:/flyway/sql:ro
+    command: migrate
+    networks:
+      - yusay-network
+
+  flyway-remote:
+    image: flyway/flyway:latest
+    container_name: yusay-flyway-remote
+    profiles:
+      - remote
+    environment:
+      FLYWAY_URL: ${FLYWAY_URL}
+      FLYWAY_USER: ${DB_USER}
+      FLYWAY_PASSWORD: ${DB_PASSWORD}
+      FLYWAY_SCHEMAS: ${FLYWAY_SCHEMAS:-yusay}
+      FLYWAY_DEFAULT_SCHEMA: ${FLYWAY_DEFAULT_SCHEMA:-yusay}
+      FLYWAY_CONNECT_RETRIES: 10
+      FLYWAY_BASELINE_ON_MIGRATE: "true"
+    volumes:
+      - ./database/migrations:/flyway/sql:ro
+    command: migrate
+    networks:
+      - yusay-network
+
+volumes:
+  postgres_data:
+    name: yusay_postgres_data
+
+networks:
+  yusay-network:
+    name: yusay_network
+    driver: bridge

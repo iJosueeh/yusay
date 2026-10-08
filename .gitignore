@@ -1,0 +1,34 @@
+# ==============================================================================
+# Yusay Platform - .gitignore
+# ==============================================================================
+
+# Environment files with credentials
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Local volumes and data directories
+postgres_data/
+*.log
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build and compilation outputs
+bin/
+obj/
+dist/
+node_modules/
+.next/
+out/

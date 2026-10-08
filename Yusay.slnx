@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Yusay.Api/Yusay.Api.csproj" />
+    <Project Path="src/Yusay.Application/Yusay.Application.csproj" />
+    <Project Path="src/Yusay.Domain/Yusay.Domain.csproj" />
+    <Project Path="src/Yusay.Infrastructure/Yusay.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Yusay.Domain.UnitTests/Yusay.Domain.UnitTests.csproj" />
+  </Folder>
+</Solution>
