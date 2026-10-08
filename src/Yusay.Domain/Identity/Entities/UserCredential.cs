@@ -4,6 +4,8 @@ namespace Yusay.Domain.Identity.Entities;
 
 public sealed class UserCredential
 {
+    private const long MicrosecondTicks = TimeSpan.TicksPerMillisecond / 1000;
+
     public Guid UserId { get; }
     public string PasswordHash { get; private set; }
     public DateTimeOffset PasswordChangedAt { get; private set; }
@@ -51,6 +53,13 @@ public sealed class UserCredential
         }
 
         return new UserCredential(userId, passwordHash, passwordChangedAt);
+    }
+
+    public DateTimeOffset NextChangeInstant(DateTimeOffset requestedInstant)
+    {
+        return requestedInstant > PasswordChangedAt
+            ? requestedInstant
+            : PasswordChangedAt.AddTicks(MicrosecondTicks);
     }
 
     public void ChangePassword(string newPasswordHash, DateTimeOffset changedAt)

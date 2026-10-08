@@ -72,7 +72,7 @@ Se aprueba formalmente el siguiente **Stack Tecnológico Consolidado para el MVP
 * **Tecnología:** ASP.NET Core Web API estructurado como un **monolito modular** desacoplado por contextos delimitados (Identidad, Evaluaciones, Seguimiento, Contenido, Compatibilidad y Auditoría).
 * **Centralización de seguridad y negocio:**
   - Todas las reglas de negocio, cálculo determinista de scores acumulados, guardas de publicación en catálogo (`MP-PHYS-001`), y transiciones de estado de intentos residen **exclusivamente en el backend**.
-  - Autenticación mediante tokens JWT firmados criptográficamente, hash de contraseñas con **Argon2id**, generación de secretos CSPRNG para tokens de verificación y reset (SHA-256), y cumplimiento de la comparación temporal corregida (`to_timestamp(token.iat) >= date_trunc('second', password_changed_at)` para `MP-PHYS-015`).
+  - Autenticación mediante tokens JWT firmados criptográficamente, hash de contraseñas con **Argon2id**, generación de secretos CSPRNG para tokens de verificación y reset (SHA-256), y cumplimiento de la política de revocación conjunta de `MP-PHYS-015` (`token.iat >= floor(epoch(password_changed_at))` acumulada a la huella de versión de credencial `pwd_at` en microsegundos Unix exactos, con rechazo de los tokens sin el claim).
   - La revocación individual selectiva para `SIGN_OUT` se gestiona en la capa de aplicación/caché (denylist en memoria o Redis con TTL de corta duración), sin alterar las tablas relacionales.
 
 ### 3. Persistencia: Dapper + Npgsql sobre PostgreSQL 18

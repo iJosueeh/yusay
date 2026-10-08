@@ -39,11 +39,7 @@ public sealed class ResetPasswordUseCase(
 
         return await _unitOfWork.ExecuteInTransactionAsync(async tx =>
         {
-            var token = await _resetTokenRepository.GetByHashAsync(tokenHash, tx, forUpdate: true, cancellationToken);
-            if (token is null)
-            {
-                throw new InvalidTokenException("El token de recuperación no existe o ya ha sido consumido.");
-            }
+            var token = await _resetTokenRepository.GetByHashAsync(tokenHash, tx, forUpdate: true, cancellationToken) ?? throw new InvalidTokenException("El token de recuperación no existe o ya ha sido consumido.");
 
             var now = DateTimeOffset.UtcNow;
             if (token.IsExpired(now))
@@ -51,27 +47,20 @@ public sealed class ResetPasswordUseCase(
                 throw new InvalidTokenException("El token de recuperación ha expirado.");
             }
 
-            var user = await _userAccountRepository.GetByIdAsync(token.UserId, tx, cancellationToken);
-            if (user is null)
-            {
-                throw new NotFoundException("No se encontró la cuenta de usuario asociada al token.");
-            }
+            var user = await _userAccountRepository.GetByIdAsync(token.UserId, tx, cancellationToken) ?? throw new NotFoundException("No se encontró la cuenta de usuario asociada al token.");
 
-            var credential = await _userCredentialRepository.GetByUserIdAsync(user.Id, tx, cancellationToken);
-            if (credential is null)
-            {
-                throw new NotFoundException("No se encontraron las credenciales del usuario.");
-            }
+            var credential = await _userCredentialRepository.GetByUserIdAsync(user.Id, tx, cancellationToken) ?? throw new NotFoundException("No se encontraron las credenciales del usuario.");
 
-            credential.ChangePassword(newPasswordHash, now);
+            var changeInstant = credential.NextChangeInstant(now);
+            credential.ChangePassword(newPasswordHash, changeInstant);
             await _userCredentialRepository.UpdateAsync(credential, tx, cancellationToken);
 
             await _resetTokenRepository.InvalidateAllForUserAsync(user.Id, tx, cancellationToken);
 
-            var audit = AuditEvent.CreatePasswordResetCompleted(user.Id, now);
+            var audit = AuditEvent.CreatePasswordResetCompleted(user.Id, credential.PasswordChangedAt);
             await _auditEventRepository.AddAsync(audit, tx, cancellationToken);
 
-            return new ResetPasswordResult(user.Id, user.Email.Value, now);
+            return new ResetPasswordResult(user.Id, user.Email.Value, credential.PasswordChangedAt);
         }, cancellationToken);
     }
 }

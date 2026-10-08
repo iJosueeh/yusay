@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Yusay.Application.Common.Interfaces;
 using Yusay.Application.Identity.Repositories;
+using Yusay.Application.Identity.Tokens;
 using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
@@ -35,7 +36,31 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();
 
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton(CreateJwtOptions(configuration));
+        services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
         return services;
+    }
+
+    private static JwtOptions CreateJwtOptions(IConfiguration configuration)
+    {
+        return new JwtOptions
+        {
+            Secret = ResolveEnvironmentValue(configuration, "JWT_SECRET") ?? string.Empty,
+            Issuer = ResolveEnvironmentValue(configuration, "JWT_ISSUER") ?? JwtOptions.DefaultIssuer,
+            Audience = ResolveEnvironmentValue(configuration, "JWT_AUDIENCE") ?? JwtOptions.DefaultAudience,
+            AccessTokenLifetimeSeconds =
+                int.TryParse(ResolveEnvironmentValue(configuration, "JWT_ACCESS_TOKEN_TTL_SECONDS"), out var lifetimeSeconds)
+                    ? lifetimeSeconds
+                    : JwtOptions.DefaultAccessTokenLifetimeSeconds
+        };
+    }
+
+    private static string? ResolveEnvironmentValue(IConfiguration configuration, string name)
+    {
+        var value = configuration[name] ?? Environment.GetEnvironmentVariable(name);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private static string ResolvePostgresConnectionString(IConfiguration configuration)

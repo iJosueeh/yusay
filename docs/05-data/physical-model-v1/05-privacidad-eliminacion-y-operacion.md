@@ -107,13 +107,23 @@ La retención de auditoría no bloquea la supresión. DP-TRANS-001 permite que f
      * Cierre de sesión (`SIGN_OUT`).
 2. **Evaluación de escenarios y mecanismos relacionales:**
    - **A. Revocación global de credenciales por usuario (`password_changed_at`):**
-     * En `yusay.user_credential`, la columna `password_changed_at timestamptz` registra el instante exacto en que se modificó la credencial.
-     * En cada validación de token de acceso, el backend verifica:
-       `to_timestamp(token.iat) >= date_trunc('second', user_credential.password_changed_at)` (o numéricamente: `token.iat >= floor(extract(epoch from user_credential.password_changed_at))`).
-     * **Análisis crítico de precisión temporal:**
+     * En `yusay.user_credential`, la columna `password_changed_at timestamptz` registra el instante exacto en que se modificó la credencial, con resolución de microsegundos.
+     * Cada access token JWT transporta, además de `iat`, el claim **`pwd_at`**: la **versión temporal de la credencial** contra la que se verificó la contraseña, expresada en **microsegundos Unix enteros** de `password_changed_at` en el momento de la emisión.
+     * En cada validación de token de acceso el backend **consulta PostgreSQL** (fila de `yusay.user_credential`) y exige **acumulativamente** las dos condiciones de revocación:
+       1. Regla temporal en segundos (se conserva literal): `to_timestamp(token.iat) >= date_trunc('second', user_credential.password_changed_at)` (o numéricamente: `token.iat >= floor(extract(epoch from user_credential.password_changed_at))`).
+       2. Huella de versión de credencial: `token.pwd_at = floor(extract(epoch from user_credential.password_changed_at) * 1000000)`, comparando **microsegundos Unix exactos** (`pwd_at == password_changed_at`).
+     * **Motivo de la política conjunta — precisión de `iat`:**
        - El estándar JWT (RFC 7519, campo `iat`) define el tiempo de emisión en **segundos Unix enteros**, mientras que PostgreSQL almacena `timestamptz` con resolución de **microsegundos**.
-       - Si un token se emite en el mismo segundo en que se actualiza `password_changed_at`, una comparación estricta puede incurrir en falsos rechazos o tolerar un token emitido milisegundos antes del cambio.
-       - *Regla de diseño:* Al actualizar `password_changed_at`, la base de datos o backend debe normalizar o redondear hacia el siguiente segundo entero (`date_trunc('second', clock_timestamp()) + interval '1 second'`), asegurando que ningún token emitido en el mismo segundo o con anterioridad sea aceptado.
+       - Por sí solo, `iat` **no permite distinguir** un token emitido antes de un cambio de contraseña de otro emitido después de ese mismo cambio cuando ambos caen en el mismo segundo: ambos comparten el mismo valor entero. Aceptar ese segundo toleraría un token emitido milisegundos *antes* del cambio; rechazarlo descartaría un token legítimo emitido milisegundos *después*. Es información perdida por la granularidad, no un problema de umbrales.
+       - La política conjunta resuelve ese segundo ambiguo con `pwd_at` sin alterar la regla aprobada en segundos: el conjunto de tokens aceptados es siempre un **subconjunto estricto** del que admitiría la regla sola, es decir, nunca se acepta un token que aquella rechazase.
+     * **Semántica de `pwd_at`:**
+       - El claim fija la versión de la credencial con la que se autenticó: si la credencial cambia después de la emisión, la huella deja de coincidir y el token queda **revocado de inmediato**, aunque su firma, `iat` y `exp` sigan siendo correctos.
+       - **Los tokens sin el claim `pwd_at` se rechazan** en la validación: sin huella no pueden acreditar vigencia (token emitido por otra instancia o alterado).
+       - La validación se apoya en la base de datos **en cada uso** del token: el backend no mantiene estado de sesiones en memoria, de modo que cualquier instancia valida cualquier token y el resultado depende únicamente de la fila de `yusay.user_credential`.
+     * **Avance estrictamente creciente de `password_changed_at`:**
+       - `password_changed_at` actúa como contador de versiones monotónico: ante una petición de cambio cuyo instante no supera al registrado (reloj repetido, concurrencia o desfase entre instancias), el backend persiste el valor anterior **+1 microsegundo** (la resolución propia de la columna).
+       - Todo cambio produce así una versión única y estrictamente mayor, con lo que la revocación alcanza exactamente a los tokens anteriores al cambio de forma determinista, sin esperas artificiales ni denylists en memoria.
+     * **Compatibilidad con múltiples instancias:** `pwd_at` es un dato persistido en la fila, no derivado del reloj local de cada instancia; ante la misma fila y el mismo token la respuesta es idéntica sea cual sea la instancia que emita o valide. Único requisito operativo: relojes sincronizados por debajo de un segundo, exigencia que ya impone la validación de `exp` e `iat` de cualquier JWT.
    - **B. Bloqueo de cuenta (`USER_BLOCKED`):**
      * Al cambiar `yusay.app_user.status = 'BLOCKED'`, toda autenticación o validación de token rechaza inmediatamente solicitudes verificando `status = 'ACTIVE'`. No requiere revocación de clave criptográfica: la comprobación del estado de cuenta en la base de datos bloquea el acceso en tiempo real.
    - **C. Supresión de cuenta (`USER_DELETED`):**
@@ -127,7 +137,8 @@ La retención de auditoría no bloquea la supresión. DP-TRANS-001 permite que f
      * Al restaurar un backup antiguo, el protocolo `MP-PHYS-012` consulta el registro duradero de supresiones y eventos recientes. Cualquier credencial reseteada con posterioridad a la fecha del backup es invalidada forzosamente para evitar revivir accesos revocados.
 3. **Clasificación y estado del mecanismo:**
    - **PARCIALMENTE RESUELTO DOCUMENTALMENTE:**
-     * La revocación global por cambio/reseteo de contraseña, bloqueo de usuario y supresión de cuenta está resuelta mediante `password_changed_at`, `app_user.status` y el protocolo de restauración.
+     * La revocación global por cambio/reseteo de contraseña se resuelve con la política conjunta (`iat` en segundos acumulado a la huella `pwd_at` en microsegundos sobre `password_changed_at`); el bloqueo de usuario y la supresión de cuenta, con `app_user.status` y el protocolo de restauración.
      * La revocación selectiva de una sola sesión individual para `SIGN_OUT` se mantiene formalmente como responsabilidad exclusiva de la capa de backend, sin modificar el modelo lógico.
+   - **Estado de implementación:** la política conjunta de revocación JWT de este mecanismo está **implementada en el backend y verificada con pruebas unitarias y de integración contra PostgreSQL 18**: emisión y validación inmediatamente después del restablecimiento, revocación de tokens anteriores al cambio (incluido el emitido en el mismo segundo), doble cambio consecutivo, rechazo de tokens sin `pwd_at` y comportamiento determinista bajo concurrencia.
 
 [Índice físico](00-indice.md) · [Integridad e índices](03-integridad-e-indices.md) · [Transacciones y concurrencia](04-transacciones-y-concurrencia.md).

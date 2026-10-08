@@ -34,11 +34,9 @@ public sealed class RequestPasswordResetUseCase(
             var user = await _userAccountRepository.GetByEmailAsync(email, tx, cancellationToken);
             if (user is null)
             {
-                // Regla de no revelación: respuesta indistinguible para correos no registrados
                 return new RequestPasswordResetResult(EmailSent: true, ResetToken: null);
             }
 
-            // Invalida cualquier token previo de recuperación para el usuario
             await _resetTokenRepository.InvalidateAllForUserAsync(user.Id, tx, cancellationToken);
 
             var rawToken = _tokenService.GenerateToken();

@@ -112,7 +112,13 @@ public sealed class PasswordResetIntegrationTests
         Assert.NotNull(credRow);
         Assert.True(_passwordHasher.VerifyPassword(newPassword, (string)credRow!.password_hash));
         Assert.False(_passwordHasher.VerifyPassword(initialPassword, (string)credRow!.password_hash));
-        Assert.Equal(resetResult.PasswordChangedAt, (DateTimeOffset)credRow!.password_changed_at);
+        // timestamptz tiene resolución de microsegundos (MP-PHYS-008 / mapeo físico) mientras que
+        // DateTimeOffset.UtcNow resuelve a 100 ns: se compara con tolerancia submilisegundo,
+        // como ya hace UserCredentialRepositoryTests, en lugar de identidad exacta de ticks.
+        var persistedPasswordChangedAt = (DateTimeOffset)credRow!.password_changed_at;
+        Assert.True(
+            Math.Abs((resetResult.PasswordChangedAt - persistedPasswordChangedAt).TotalMilliseconds) < 1,
+            $"Se esperaba password_changed_at en la base de datos cercano a {resetResult.PasswordChangedAt:O}, pero fue {persistedPasswordChangedAt:O}.");
 
         // Assert 4: Token de recuperación consumido (0 filas)
         var tokenCount = await conn.ExecuteScalarAsync<int>(
