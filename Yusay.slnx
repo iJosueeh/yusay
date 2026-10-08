@@ -7,5 +7,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Yusay.Domain.UnitTests/Yusay.Domain.UnitTests.csproj" />
+    <Project Path="tests/Yusay.IntegrationTests/Yusay.IntegrationTests.csproj" />
   </Folder>
 </Solution>

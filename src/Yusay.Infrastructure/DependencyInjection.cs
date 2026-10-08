@@ -2,6 +2,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Yusay.Application.Common.Interfaces;
+using Yusay.Application.Identity.Repositories;
+using Yusay.Infrastructure.Identity.Repositories;
+using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
 
 namespace Yusay.Infrastructure;
@@ -20,6 +23,17 @@ public static class DependencyInjection
         services.AddSingleton(dataSource);
 
         services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        services.AddScoped<IAuditEventRepository, Audit.Repositories.AuditEventRepository>();
+
+        services.AddScoped<IUserAccountRepository, UserAccountRepository>();
+        services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
+        services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
+        services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+
+        services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
+        services.AddSingleton<ISecureTokenService, SecureTokenService>();
 
         return services;
     }
