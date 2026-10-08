@@ -1,0 +1,11 @@
+# Modelo lógico de Yusay — v1.0
+
+**Estado oficial de la línea base lógica v1.0: APPROVED / FROZEN. Dictamen: FAVORABLE.**
+
+**Fecha de aprobación: 2026-10-07. Autoridad: responsable del proyecto.** Esta fecha corresponde a la aprobación formal, no a la creación o modificación de este documento. Alcance: modelo lógico de datos del MVP de Yusay. La aprobación no comprende diseño físico, implementación, despliegue ni validación productiva. Véase el [dictamen definitivo](12-dictamen-modelo-logico-v1.md).
+
+El [inventario](02-inventario-relaciones.md) fija las 32 relaciones. Sus atributos, claves, referencias y restricciones aprobadas constan en la [especificación maestra](especificacion-maestra-v1.0.md) y están documentados por módulos con las precisiones aprobadas, no por deducción del [modelo conceptual](../../03-domain/conceptual-model.md).
+
+La documentación distingue dominios lógicos de tipos físicos y claves de invariantes transaccionales. Se documenta el modelo lógico recibido sin proponer diseño físico PostgreSQL.
+
+La [matriz](10-matriz-trazabilidad.md) incorpora las precisiones aprobadas. [Identidad](04-diccionario-datos/01-identidad.md) está aprobada provisionalmente con precisiones incorporadas; [Evaluaciones](04-diccionario-datos/02-evaluaciones.md) incorpora REV-LOG-004 RESOLVED para el MVP; [Seguimiento](04-diccionario-datos/03-seguimiento.md) está aprobado provisionalmente con precisiones incorporadas; [Compatibilidad](04-diccionario-datos/04-compatibilidad.md) incorpora REV-LOG-008/009/010 consolidadas para MVP; [Contenido](04-diccionario-datos/05-contenido.md) está aprobado provisionalmente con políticas consolidadas; [Auditoría](04-diccionario-datos/06-auditoria.md) incorpora catálogos aprobados; REV-LOG-001/002 están RESOLVED para MVP. [Dominios](13-dominios-logicos.md), [integridad](05-integridad-referencial.md) y [estados](06-estados-y-transiciones.md) consolidan las precisiones sin cambiar relaciones. DP-TRANS-001/002 están RESOLVED para MVP; el [dictamen definitivo](12-dictamen-modelo-logico-v1.md) queda formalmente aprobado y la línea base está FROZEN. Las referencias a aprobaciones provisionales conservan los antecedentes de revisión. No se genera un modelo alternativo.
