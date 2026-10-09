@@ -1,20 +1,29 @@
 using Dapper;
+using Yusay.Api.Common;
 using Yusay.Application;
 using Yusay.Application.Common.Interfaces;
 using Yusay.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Cargar variables de entorno del sistema y de archivos si están presentes
 builder.Configuration.AddEnvironmentVariables();
 
-// Configuración de capas y servicios (Monolito Modular)
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+builder.Services.AddControllers(options =>
+{
+    options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+});
+
 builder.Services.AddOpenApi();
 
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {
@@ -23,7 +32,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Endpoint de verificación de salud técnica y conectividad a PostgreSQL 18
 app.MapGet("/health", async (IDbConnectionFactory connectionFactory) =>
 {
     try
@@ -64,6 +72,7 @@ app.MapGet("/health", async (IDbConnectionFactory connectionFactory) =>
 })
 .WithName("HealthCheck");
 
+app.MapControllers();
 app.Run();
 
 internal sealed record HealthStatus(string PostgresVersion, string CurrentSchema, int TableCount);

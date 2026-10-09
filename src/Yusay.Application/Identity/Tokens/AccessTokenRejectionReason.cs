@@ -9,5 +9,6 @@ public enum AccessTokenRejectionReason
     InvalidAudience = 4,
     Expired = 5,
     MissingIssuedAt = 6,
-    MissingCredentialVersion = 7
+    MissingCredentialVersion = 7,
+    MissingTokenId = 8
 }

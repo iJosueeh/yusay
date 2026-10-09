@@ -62,9 +62,38 @@ services:
     networks:
       - yusay-network
 
+  redis:
+    image: redis:8-alpine
+    container_name: yusay-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --requirepass
+      - ${REDIS_PASSWORD:-redis_dev_password_yusay}
+      - --protected-mode
+      - "yes"
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-redis_dev_password_yusay} ping | grep -q PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - yusay-network
+
 volumes:
   postgres_data:
     name: yusay_postgres_data
+  redis_data:
+    name: yusay_redis_data
 
 networks:
   yusay-network:

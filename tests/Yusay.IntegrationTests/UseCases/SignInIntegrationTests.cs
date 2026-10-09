@@ -12,6 +12,7 @@ using Yusay.Application.Identity.Commands.VerifyEmail;
 using Yusay.Application.Identity.Queries.ValidateAccessToken;
 using Yusay.Application.Identity.Tokens;
 using Yusay.Infrastructure.Audit.Repositories;
+using Yusay.Infrastructure.Emailing;
 using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
@@ -66,7 +67,7 @@ public sealed class SignInIntegrationTests
     }
 
     private RegisterUserUseCase CreateRegisterUseCase() => new(
-        _unitOfWork, _userAccountRepo, _userCredentialRepo, _verificationTokenRepo, _auditEventRepo, _passwordHasher, _tokenService);
+        _unitOfWork, _userAccountRepo, _userCredentialRepo, _verificationTokenRepo, _auditEventRepo, _passwordHasher, _tokenService, new NullEmailVerificationSender());
 
     private VerifyEmailUseCase CreateVerifyEmailUseCase() => new(
         _unitOfWork, _userAccountRepo, _verificationTokenRepo, _auditEventRepo, _tokenService);
@@ -81,7 +82,20 @@ public sealed class SignInIntegrationTests
         _unitOfWork, _userAccountRepo, _userCredentialRepo, _auditEventRepo, _passwordHasher, _jwtTokenService);
 
     private ValidateAccessTokenUseCase CreateValidateAccessTokenUseCase() => new(
-        _userAccountRepo, _userCredentialRepo, _jwtTokenService);
+        _userAccountRepo, _userCredentialRepo, _jwtTokenService, new EmptyAccessTokenDenylist());
+
+    /// <summary>
+    /// Denylist vacía para esta clase: aquí no se revoca ninguna sesión (el cierre selectivo se
+    /// ejercita en SignOutIntegrationTests contra Redis real).
+    /// </summary>
+    private sealed class EmptyAccessTokenDenylist : IAccessTokenDenylist
+    {
+        public Task<bool> IsRevokedAsync(string tokenId, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+
+        public Task<bool> RevokeAsync(string tokenId, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+            => Task.FromResult(false);
+    }
 
     /// <summary>
     /// Lee el instante de cambio de credencial persistido, por el mismo repositorio que emplean
@@ -399,6 +413,7 @@ public sealed class SignInIntegrationTests
             {
                 new Claim(JwtRegisteredClaimNames.Sub, userId.ToString("D")),
                 new Claim(JwtRegisteredClaimNames.Email, email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("D")),
                 new Claim(JwtRegisteredClaimNames.Iat, issuedAtSeconds.ToString(), ClaimValueTypes.Integer64),
                 new Claim(
                     JwtTokenService.CredentialVersionClaim,

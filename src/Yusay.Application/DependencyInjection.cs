@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddScoped<Identity.Commands.RequestPasswordReset.IRequestPasswordResetUseCase, Identity.Commands.RequestPasswordReset.RequestPasswordResetUseCase>();
         services.AddScoped<Identity.Commands.ResetPassword.IResetPasswordUseCase, Identity.Commands.ResetPassword.ResetPasswordUseCase>();
         services.AddScoped<Identity.Commands.SignIn.ISignInUseCase, Identity.Commands.SignIn.SignInUseCase>();
+        services.AddScoped<Identity.Commands.SignOut.ISignOutUseCase, Identity.Commands.SignOut.SignOutUseCase>();
         services.AddScoped<Identity.Queries.ValidateAccessToken.IValidateAccessTokenUseCase, Identity.Queries.ValidateAccessToken.ValidateAccessTokenUseCase>();
 
         return services;

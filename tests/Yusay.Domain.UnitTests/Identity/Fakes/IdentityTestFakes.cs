@@ -1,6 +1,8 @@
 using System.Data.Common;
+using Yusay.Application.Common.Exceptions;
 using Yusay.Application.Common.Interfaces;
 using Yusay.Application.Identity.Repositories;
+using Yusay.Application.Identity.Tokens;
 using Yusay.Domain.Audit.Entities;
 using Yusay.Domain.Identity.Entities;
 using Yusay.Domain.Identity.ValueObjects;
@@ -162,9 +164,94 @@ public sealed class FakeAuditEventRepository : IAuditEventRepository
 {
     public List<AuditEvent> Events { get; } = new();
 
+    /// <summary>Inyecta un fallo de persistencia en la próxima inserción (p. ej. PostgreSQL caído).</summary>
+    public bool FailNextAdd { get; set; }
+
     public Task AddAsync(AuditEvent auditEvent, DbTransaction? transaction = null, CancellationToken cancellationToken = default)
     {
+        if (FailNextAdd)
+        {
+            FailNextAdd = false;
+            throw new InvalidOperationException("Fallo inyectado de PostgreSQL al registrar la auditoría.");
+        }
+
         Events.Add(auditEvent);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Denylist en memoria con la semántica SET NX de Redis: alta idempotente bajo concurrencia y
+/// modo de indisponibilidad para ejercitar el fail-closed de la validación y del cierre.
+/// </summary>
+public sealed class FakeAccessTokenDenylist : IAccessTokenDenylist
+{
+    private readonly HashSet<string> _revoked = new(StringComparer.Ordinal);
+    private readonly object _sync = new();
+
+    public bool Unavailable { get; set; }
+
+    public int RevokedCount
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _revoked.Count;
+            }
+        }
+    }
+
+    public Task<bool> IsRevokedAsync(string tokenId, CancellationToken cancellationToken = default)
+    {
+        ThrowIfUnavailable();
+
+        lock (_sync)
+        {
+            return Task.FromResult(_revoked.Contains(tokenId));
+        }
+    }
+
+    public Task<bool> RevokeAsync(string tokenId, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+    {
+        ThrowIfUnavailable();
+
+        lock (_sync)
+        {
+            // Como SET ... NX: solo la primera llamada por jti recibe confirmación.
+            return Task.FromResult(_revoked.Add(tokenId));
+        }
+    }
+
+    private void ThrowIfUnavailable()
+    {
+        if (Unavailable)
+        {
+            throw new ServiceUnavailableException("El almacén de revocación de sesiones no está disponible (simulado).");
+        }
+    }
+}
+
+/// <summary>
+/// Doble de <see cref="IEmailVerificationSender"/> que captura las entregas de tokens de
+/// verificación para poder asertarlas sin incorporar un proveedor de correo externo.
+/// </summary>
+public sealed class FakeEmailVerificationSender : IEmailVerificationSender
+{
+    private readonly object _sync = new();
+
+    public List<(string Email, string Token)> Deliveries { get; } = new();
+
+    public Task SendVerificationTokenAsync(
+        string recipientEmail,
+        string verificationToken,
+        CancellationToken cancellationToken = default)
+    {
+        lock (_sync)
+        {
+            Deliveries.Add((recipientEmail, verificationToken));
+        }
+
         return Task.CompletedTask;
     }
 }

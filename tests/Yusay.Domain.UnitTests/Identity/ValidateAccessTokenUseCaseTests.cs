@@ -22,6 +22,7 @@ public class ValidateAccessTokenUseCaseTests
 
     private readonly FakeUserAccountRepository _userAccountRepo = new();
     private readonly FakeUserCredentialRepository _userCredentialRepo = new();
+    private readonly FakeAccessTokenDenylist _denylist = new();
     private readonly FixedTimeProvider _clock = new(DateTimeOffset.UtcNow);
     private readonly string _secret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
     private readonly Argon2idPasswordHasher _passwordHasher =
@@ -38,7 +39,8 @@ public class ValidateAccessTokenUseCaseTests
     private ValidateAccessTokenUseCase CreateUseCase() => new(
         _userAccountRepo,
         _userCredentialRepo,
-        _jwtTokenService);
+        _jwtTokenService,
+        _denylist);
 
     private UserAccount CreateUser(
         string email,
@@ -383,5 +385,37 @@ public class ValidateAccessTokenUseCaseTests
         // Assert
         Assert.Equal(blocked.Message, altered.Message);
         Assert.Equal(revoked.Message, altered.Message);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Revocación selectiva de sesión por jti (denylist — MP-PHYS-015 D)
+    // ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ExecuteAsync_WithRevokedSession_ShouldRejectWithTheGenericMessage()
+    {
+        // Arrange
+        var user = CreateUser("signout@yusay.local");
+        var token = IssueTokenFor(user);
+        var tokenId = _jwtTokenService.ValidateAccessToken(token).TokenId;
+        Assert.False(string.IsNullOrWhiteSpace(tokenId));
+
+        await _denylist.RevokeAsync(tokenId, DateTimeOffset.UtcNow.AddHours(1));
+
+        // Act & Assert: el rechazo es indistinguible del resto con el mismo mensaje genérico
+        var exception = await Assert.ThrowsAsync<UnauthorizedException>(() => ExecuteAsync(CreateUseCase(), token));
+        Assert.Contains("revocado", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenDenylistIsUnavailable_ShouldFailClosed()
+    {
+        // Arrange: Redis inaccesible; la validación no puede confirmar que el token no está revocado
+        var user = CreateUser("failclosed@yusay.local");
+        var token = IssueTokenFor(user);
+        _denylist.Unavailable = true;
+
+        // Act & Assert: fail-closed — ni aceptar el token ni devolver un rechazo genérico de sesión
+        await Assert.ThrowsAsync<ServiceUnavailableException>(() => ExecuteAsync(CreateUseCase(), token));
     }
 }

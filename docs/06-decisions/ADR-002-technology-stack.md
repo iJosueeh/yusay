@@ -73,7 +73,7 @@ Se aprueba formalmente el siguiente **Stack Tecnológico Consolidado para el MVP
 * **Centralización de seguridad y negocio:**
   - Todas las reglas de negocio, cálculo determinista de scores acumulados, guardas de publicación en catálogo (`MP-PHYS-001`), y transiciones de estado de intentos residen **exclusivamente en el backend**.
   - Autenticación mediante tokens JWT firmados criptográficamente, hash de contraseñas con **Argon2id**, generación de secretos CSPRNG para tokens de verificación y reset (SHA-256), y cumplimiento de la política de revocación conjunta de `MP-PHYS-015` (`token.iat >= floor(epoch(password_changed_at))` acumulada a la huella de versión de credencial `pwd_at` en microsegundos Unix exactos, con rechazo de los tokens sin el claim).
-  - La revocación individual selectiva para `SIGN_OUT` se gestiona en la capa de aplicación/caché (denylist en memoria o Redis con TTL de corta duración), sin alterar las tablas relacionales.
+  - La revocación individual selectiva para `SIGN_OUT` se gestiona en la capa de aplicación/caché (denylist en Redis con TTL igual a la vida restante del access token), sin alterar las tablas relacionales.
 
 ### 3. Persistencia: Dapper + Npgsql sobre PostgreSQL 18
 * **Tecnología:** Driver oficial **Npgsql** y micro-ORM **Dapper**.
@@ -105,7 +105,7 @@ Se aprueba formalmente el siguiente **Stack Tecnológico Consolidado para el MVP
 ### Negativas y responsabilidades
 1. **Disciplina en SQL manual:** Al usar Dapper, las consultas SQL no se generan a partir de modelos de clases; los cambios en los 147 atributos del modelo físico deben reflejarse manualmente en las cadenas SQL, requiriendo cobertura rigurosa mediante tests de integración.
 2. **Mantenimiento de dos ecosistemas:** El stack requiere mantener herramientas de desarrollo en C# (.NET SDK) para el backend y Node.js/npm para el frontend Next.js.
-3. **Gestión de estado y caché efímera:** La revocación de tokens individuales en `SIGN_OUT` (`MP-PHYS-015`) debe ser implementada y mantenida rigurosamente en la capa de middleware de ASP.NET Core (memoria distribuida o Redis).
+3. **Gestión de estado y caché efímera:** La revocación de tokens individuales en `SIGN_OUT` (`MP-PHYS-015`) está implementada y debe mantenerse rigurosamente en la capa de aplicación de ASP.NET Core, con comprobación centralizada en la validación de tokens y denylist Redis compartida entre instancias.
 
 ---
 

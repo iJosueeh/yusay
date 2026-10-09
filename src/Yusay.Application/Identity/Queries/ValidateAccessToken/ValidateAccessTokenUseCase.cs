@@ -7,13 +7,15 @@ namespace Yusay.Application.Identity.Queries.ValidateAccessToken;
 public sealed class ValidateAccessTokenUseCase(
     IUserAccountRepository userAccountRepository,
     IUserCredentialRepository userCredentialRepository,
-    IJwtTokenService jwtTokenService) : IValidateAccessTokenUseCase
+    IJwtTokenService jwtTokenService,
+    IAccessTokenDenylist accessTokenDenylist) : IValidateAccessTokenUseCase
 {
     private const string TokenRejectedMessage = "El token de acceso no es válido, ha expirado o ha sido revocado.";
 
     private readonly IUserAccountRepository _userAccountRepository = userAccountRepository;
     private readonly IUserCredentialRepository _userCredentialRepository = userCredentialRepository;
     private readonly IJwtTokenService _jwtTokenService = jwtTokenService;
+    private readonly IAccessTokenDenylist _accessTokenDenylist = accessTokenDenylist;
 
     public async Task<ValidateAccessTokenResult> ExecuteAsync(ValidateAccessTokenQuery query, CancellationToken cancellationToken = default)
     {
@@ -24,6 +26,11 @@ public sealed class ValidateAccessTokenUseCase(
 
         var validation = _jwtTokenService.ValidateAccessToken(query.AccessToken);
         if (!validation.IsValid)
+        {
+            throw new UnauthorizedException(TokenRejectedMessage);
+        }
+        
+        if (await _accessTokenDenylist.IsRevokedAsync(validation.TokenId, cancellationToken))
         {
             throw new UnauthorizedException(TokenRejectedMessage);
         }

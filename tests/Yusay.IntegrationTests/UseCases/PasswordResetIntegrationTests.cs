@@ -5,6 +5,7 @@ using Yusay.Application.Identity.Commands.RegisterUser;
 using Yusay.Application.Identity.Commands.RequestPasswordReset;
 using Yusay.Application.Identity.Commands.ResetPassword;
 using Yusay.Infrastructure.Audit.Repositories;
+using Yusay.Infrastructure.Emailing;
 using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
@@ -51,7 +52,8 @@ public sealed class PasswordResetIntegrationTests
         _verificationTokenRepo,
         _auditEventRepo,
         _passwordHasher,
-        _tokenService);
+        _tokenService,
+        new NullEmailVerificationSender());
 
     private RequestPasswordResetUseCase CreateRequestResetUseCase() => new(
         _unitOfWork,

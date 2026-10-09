@@ -343,6 +343,41 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
+    public void ValidateAccessToken_WithoutTokenIdClaim_ShouldRejectMissingTokenId()
+    {
+        // Arrange: sin jti no puede consultarse la denylist de revocación selectiva, por lo que
+        // el token no puede demostrar que su sesión sigue vigente (MP-PHYS-015, SIGN_OUT).
+        var token = CraftSignedToken(includeTokenId: false);
+
+        // Act
+        var validation = CreateService().ValidateAccessToken(token);
+
+        // Assert
+        Assert.False(validation.IsValid);
+        Assert.Equal(AccessTokenRejectionReason.MissingTokenId, validation.Reason);
+    }
+
+    [Fact]
+    public void IssueAccessToken_ThenValidate_ShouldExposeAUniqueTokenIdPerSession()
+    {
+        // Arrange
+        var service = CreateService();
+
+        // Act
+        var first = service.IssueAccessToken(Guid.NewGuid(), "holder@yusay.local", _clock.UtcNow);
+        var second = service.IssueAccessToken(Guid.NewGuid(), "holder@yusay.local", _clock.UtcNow);
+        var firstValidation = service.ValidateAccessToken(first.Token);
+        var secondValidation = service.ValidateAccessToken(second.Token);
+
+        // Assert: cada emisión produce un jti distinto, la identidad de su sesión
+        Assert.True(firstValidation.IsValid, firstValidation.Reason?.ToString());
+        Assert.True(Guid.TryParse(firstValidation.TokenId, out var firstTokenId));
+        Assert.True(Guid.TryParse(secondValidation.TokenId, out var secondTokenId));
+        Assert.NotEqual(firstTokenId, secondTokenId);
+        Assert.NotEqual(Guid.Empty, firstTokenId);
+    }
+
+    [Fact]
     public void ValidateAccessToken_WithoutExpirationClaim_ShouldReject()
     {
         // Arrange
@@ -429,6 +464,7 @@ public class JwtTokenServiceTests
         DateTime? expires = null,
         bool includeIssuedAt = true,
         bool includeCredentialVersion = true,
+        bool includeTokenId = true,
         Guid? subject = null,
         string email = "holder@yusay.local")
     {
@@ -457,6 +493,11 @@ public class JwtTokenServiceTests
                 JwtTokenService.CredentialVersionClaim,
                 AccessTokenRevocationPolicy.ToCredentialVersion(issuedAt).ToString(),
                 ClaimValueTypes.Integer64));
+        }
+
+        if (includeTokenId)
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("D")));
         }
 
         var payload = new JwtPayload(

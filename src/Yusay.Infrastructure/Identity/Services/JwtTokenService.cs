@@ -9,11 +9,6 @@ namespace Yusay.Infrastructure.Identity.Services;
 
 public sealed class JwtTokenService : IJwtTokenService
 {
-    /// <summary>
-    /// Claim que ancla el token a la versión exacta de la credencial (microsegundos Unix de
-    /// <c>yusay.user_credential.password_changed_at</c>) contra la que se verificó la contraseña.
-    /// Sin él el token no puede demostrar que sigue vigente y se rechaza (MP-PHYS-015).
-    /// </summary>
     public const string CredentialVersionClaim = "pwd_at";
 
     private readonly JwtOptions _options;
@@ -74,11 +69,7 @@ public sealed class JwtTokenService : IJwtTokenService
             new(JwtRegisteredClaimNames.Sub, userId.ToString("D")),
             new(JwtRegisteredClaimNames.Email, email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("D")),
-
             new(JwtRegisteredClaimNames.Iat, issuedAtSeconds.ToString(CultureInfo.InvariantCulture), ClaimValueTypes.Integer64),
-
-            // Versión de credencial leída de la fila validada: si la contraseña cambia después de
-            // esta lectura, el token nace revocado aunque su firma y su iat sigan siendo correctos.
             new(
                 CredentialVersionClaim,
                 AccessTokenRevocationPolicy.ToCredentialVersion(passwordChangedAt).ToString(CultureInfo.InvariantCulture),
@@ -134,6 +125,17 @@ public sealed class JwtTokenService : IJwtTokenService
             return AccessTokenValidationResult.Reject(AccessTokenRejectionReason.MissingCredentialVersion);
         }
 
+        var tokenId = ReadClaim(securityToken, JwtRegisteredClaimNames.Jti);
+        if (string.IsNullOrWhiteSpace(tokenId))
+        {
+            return AccessTokenValidationResult.Reject(AccessTokenRejectionReason.MissingTokenId);
+        }
+
+        if (!Guid.TryParse(tokenId, out _))
+        {
+            return AccessTokenValidationResult.Reject(AccessTokenRejectionReason.Malformed);
+        }
+
         var subject = ReadClaim(securityToken, JwtRegisteredClaimNames.Sub);
         if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
         {
@@ -150,6 +152,7 @@ public sealed class JwtTokenService : IJwtTokenService
             IsValid: true,
             UserId: userId,
             Email: email,
+            TokenId: tokenId,
             IssuedAtSeconds: issuedAtSeconds,
             PasswordChangedAtMicroseconds: passwordChangedAtMicroseconds,
             IssuedAt: DateTimeOffset.FromUnixTimeSeconds(issuedAtSeconds),

@@ -4,6 +4,7 @@ using Yusay.Application.Common.Exceptions;
 using Yusay.Application.Identity.Commands.RegisterUser;
 using Yusay.Application.Identity.Commands.VerifyEmail;
 using Yusay.Infrastructure.Audit.Repositories;
+using Yusay.Infrastructure.Emailing;
 using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
@@ -49,7 +50,8 @@ public sealed class RegisterAndVerifyEmailIntegrationTests
         _tokenRepo,
         _auditEventRepo,
         _passwordHasher,
-        _tokenService);
+        _tokenService,
+        new NullEmailVerificationSender());
 
     private VerifyEmailUseCase CreateVerifyUseCase() => new(
         _unitOfWork,

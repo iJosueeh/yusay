@@ -176,6 +176,27 @@ public sealed class AuditEvent
             metadata: SignInFailedMetadata);
     }
 
+    public static AuditEvent CreateSignOut(
+        Guid userId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (userId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del usuario para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: userId,
+            actorKind: "USER",
+            action: "SIGN_OUT",
+            targetType: "AUTHENTICATION",
+            targetIdentifier: null,
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
     public static AuditEvent Rehydrate(
         Guid auditEventId,
         Guid? actorUserId,

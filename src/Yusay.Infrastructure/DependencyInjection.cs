@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using StackExchange.Redis;
 using Npgsql;
 using Yusay.Application.Common.Interfaces;
 using Yusay.Application.Identity.Repositories;
@@ -24,10 +25,9 @@ public static class DependencyInjection
         services.AddSingleton(dataSource);
 
         services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
+
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-
         services.AddScoped<IAuditEventRepository, Audit.Repositories.AuditEventRepository>();
-
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
@@ -35,12 +35,38 @@ public static class DependencyInjection
 
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();
-
+        services.AddSingleton<IEmailVerificationSender, Emailing.NullEmailVerificationSender>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton(CreateJwtOptions(configuration));
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
+        var redisConfiguration = ResolveRedisConfiguration(configuration);
+        services.AddSingleton<IConnectionMultiplexer>(_ =>
+        {
+            var options = ConfigurationOptions.Parse(redisConfiguration);
+            options.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(options);
+        });
+        services.AddSingleton<IAccessTokenDenylist, RedisAccessTokenDenylist>();
+
         return services;
+    }
+
+    private static string ResolveRedisConfiguration(IConfiguration configuration)
+    {
+        var url = ResolveEnvironmentValue(configuration, "REDIS_URL");
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
+        var host = ResolveEnvironmentValue(configuration, "REDIS_HOST") ?? "localhost";
+        var port = ResolveEnvironmentValue(configuration, "REDIS_PORT") ?? "6379";
+        var password = ResolveEnvironmentValue(configuration, "REDIS_PASSWORD");
+
+        var endpoint = $"{host}:{port}";
+
+        return string.IsNullOrWhiteSpace(password) ? endpoint : $"{endpoint},password={password}";
     }
 
     private static JwtOptions CreateJwtOptions(IConfiguration configuration)

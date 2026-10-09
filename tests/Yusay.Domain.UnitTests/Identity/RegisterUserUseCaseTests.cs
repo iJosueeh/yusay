@@ -21,6 +21,7 @@ public class RegisterUserUseCaseTests
     private readonly FakeAuditEventRepository _auditEventRepo = new();
     private readonly IPasswordHasher _passwordHasher = new Argon2idPasswordHasher(new Argon2Options { MemorySize = 1024, Iterations = 2, DegreeOfParallelism = 1 });
     private readonly ISecureTokenService _tokenService = new SecureTokenService();
+    private readonly FakeEmailVerificationSender _emailSender = new();
 
     private RegisterUserUseCase CreateUseCase() => new(
         _unitOfWork,
@@ -29,7 +30,8 @@ public class RegisterUserUseCaseTests
         _tokenRepo,
         _auditEventRepo,
         _passwordHasher,
-        _tokenService);
+        _tokenService,
+        _emailSender);
 
     [Fact]
     public async Task ExecuteAsync_WithValidData_ShouldRegisterUserAndIssueTokenAndAudit()
@@ -74,6 +76,12 @@ public class RegisterUserUseCaseTests
         Assert.Equal(2, _auditEventRepo.Events.Count);
         Assert.Contains(_auditEventRepo.Events, e => e.Action == "USER_REGISTERED" && e.ActorUserId == result.UserId);
         Assert.Contains(_auditEventRepo.Events, e => e.Action == "EMAIL_VERIFICATION_TOKEN_ISSUED" && e.ActorUserId == result.UserId);
+
+        // La entrega por correo se intenta una sola vez, tras el commit, con el mismo token
+        // que el caso de uso devuelve a sus llamadores (la respuesta HTTP nunca lo expone).
+        var delivery = Assert.Single(_emailSender.Deliveries);
+        Assert.Equal("newuser@yusay.org", delivery.Email);
+        Assert.Equal(result.VerificationToken, delivery.Token);
 
         Assert.True(_unitOfWork.TransactionExecuted);
     }
@@ -149,5 +157,6 @@ public class RegisterUserUseCaseTests
         var ex = await Assert.ThrowsAsync<ConflictException>(() => useCase.ExecuteAsync(command));
         Assert.Contains("Ya existe una cuenta", ex.Message);
         Assert.Single(_userAccountRepo.Users); // No se añadió un nuevo usuario
+        Assert.Empty(_emailSender.Deliveries); // No se entrega ningún token si el registro falla
     }
 }

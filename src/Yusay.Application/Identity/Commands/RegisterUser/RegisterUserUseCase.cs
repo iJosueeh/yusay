@@ -14,7 +14,8 @@ public sealed class RegisterUserUseCase(
     IEmailVerificationTokenRepository tokenRepository,
     IAuditEventRepository auditEventRepository,
     IPasswordHasher passwordHasher,
-    ISecureTokenService tokenService) : IRegisterUserUseCase
+    ISecureTokenService tokenService,
+    IEmailVerificationSender emailVerificationSender) : IRegisterUserUseCase
 {
     private readonly IUnitOfWork _unitOfWork = unitOfWork;
     private readonly IUserAccountRepository _userAccountRepository = userAccountRepository;
@@ -23,6 +24,7 @@ public sealed class RegisterUserUseCase(
     private readonly IAuditEventRepository _auditEventRepository = auditEventRepository;
     private readonly IPasswordHasher _passwordHasher = passwordHasher;
     private readonly ISecureTokenService _tokenService = tokenService;
+    private readonly IEmailVerificationSender _emailVerificationSender = emailVerificationSender;
 
     public async Task<RegisterUserResult> ExecuteAsync(RegisterUserCommand command, CancellationToken cancellationToken = default)
     {
@@ -70,6 +72,7 @@ public sealed class RegisterUserUseCase(
             await _auditEventRepository.AddAsync(tokenIssuedAudit, tx, cancellationToken);
         }, cancellationToken);
 
+        await _emailVerificationSender.SendVerificationTokenAsync(user.Email.Value, rawToken, cancellationToken);
         return new RegisterUserResult(user.Id, user.Email.Value, rawToken);
     }
 }
