@@ -60,7 +60,8 @@ public sealed class PasswordResetIntegrationTests
         _userAccountRepo,
         _resetTokenRepo,
         _auditEventRepo,
-        _tokenService);
+        _tokenService,
+        new NullPasswordResetEmailSender());
 
     private ResetPasswordUseCase CreateResetPasswordUseCase() => new(
         _unitOfWork,

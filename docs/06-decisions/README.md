@@ -21,9 +21,10 @@ Decisiones resueltas por ADR-001 y ADR-002:
 - **Frontend technology:** Next.js (React 19, TypeScript) ([ADR-002](ADR-002-technology-stack.md)).
 - **Persistence strategy:** Dapper + Npgsql ([ADR-002](ADR-002-technology-stack.md)).
 - **Migrations & Testing:** Flyway + xUnit + Testcontainers ([ADR-002](ADR-002-technology-stack.md)).
+- **Authentication strategy:** JWT + Argon2id consolidado en backend ([ADR-002](ADR-002-technology-stack.md); [OQ-ARCH-010](#oq-arch-010)). OAuth externo permanece como capacidad COULD abierta (OQ-PROD-018).
 
 Decisiones que mantienen **Status: OPEN**:
-- **Authentication details:** JWT + Argon2id consolidado en backend ([ADR-002](ADR-002-technology-stack.md)); OAuth externo permanece como capacidad COULD abierta.
+- **Authorization & permissions:** propiedad de datos privados, habilitación ADMINISTRATOR y respuestas 401/403/503 ([OQ-ARCH-017](#oq-arch-017)).
 - **Hosting/deployment:** definir entorno de producción y proveedor cloud según restricciones operativas.
 - **Caching strategy:** justificar solo si responde a necesidades concretas de rendimiento (salvo denylist de revocación selectiva de sesión en backend).
 - **Search strategy:** definir necesidades de búsqueda antes de decidir mecanismos o infraestructura.
@@ -55,8 +56,8 @@ Decisiones que mantienen **Status: OPEN**:
 - **ID:** OQ-ARCH-010.
 - **Pregunta:** ¿Qué Authentication strategy cumplirá las necesidades de identidad y seguridad?
 - **Motivo:** Precisar sesión, verificación y recuperación sin asumir JWT u OAuth principal.
-- **Impacto:** RF-001 a RF-003 y RNF-003, RNF-004.
-- **Status:** OPEN.
+- **Impacto:** RF-001 a RF-003 y RNF-003. La autorización server-side (RNF-004) queda asignada a OQ-ARCH-017.
+- **Status:** RESOLVED via [ADR-002](ADR-002-technology-stack.md) (JWT + Argon2id, secretos CSPRNG y revocación MP-PHYS-015 con denylist Redis), con la estrategia implementada y verificada en Yusay.Api. OAuth externo permanece como capacidad COULD abierta en OQ-PROD-018. El alcance de autorización pendiente (RNF-004) se traslada a OQ-ARCH-017.
 
 ### OQ-ARCH-011
 
@@ -104,4 +105,12 @@ Decisiones que mantienen **Status: OPEN**:
 - **Pregunta:** ¿Qué capacidades del equipo y restricciones operativas condicionan las alternativas?
 - **Motivo:** Evaluar viabilidad y costes sin presumir un entorno o experiencia técnica.
 - **Impacto:** Todas las decisiones pendientes y ADR-001.
+- **Status:** OPEN.
+
+### OQ-ARCH-017
+
+- **ID:** OQ-ARCH-017.
+- **Pregunta:** ¿Qué Authorization strategy aplicará el backend a los recursos de Yusay?
+- **Motivo:** Las reglas sustantivas están aprobadas (propiedad de datos privados, ACTIVE y correo verificado, alcance limitado de la habilitación ADMINISTRATOR), pero faltan por decidir el mecanismo de aplicación server-side y las respuestas de denegación.
+- **Impacto:** RNF-004, RNF-005, RN-025, RN-026 y RF-019 a RF-023; depende de OQ-PROD-002, OQ-PROD-008 y OQ-NFR-004.
 - **Status:** OPEN.

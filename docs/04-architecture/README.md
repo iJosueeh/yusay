@@ -2,7 +2,7 @@
 
 **Status: IN PROGRESS (Stack consolidado en ADR-002)**
 
-La arquitectura tecnológica de Yusay se formaliza en [ADR-001](../06-decisions/ADR-001-database-engine.md) (PostgreSQL 18) y [ADR-002](../06-decisions/ADR-002-technology-stack.md) (Next.js en frontend, ASP.NET Core .NET 10 LTS monolito modular en backend, Dapper + Npgsql en persistencia, Flyway en migraciones, xUnit + Testcontainers en testing y Docker Compose en desarrollo local). Esta selección preserva intacta la línea base lógica v1.0 y el diseño físico v1.0. Los [bounded contexts](../03-domain/bounded-contexts.md) se estructuran como módulos desacoplados dentro del monolito modular.
+La arquitectura tecnológica de Yusay se formaliza en [ADR-001](../06-decisions/ADR-001-database-engine.md) (PostgreSQL 18) y [ADR-002](../06-decisions/ADR-002-technology-stack.md) (Next.js en frontend, ASP.NET Core .NET 10 LTS monolito modular en backend, Dapper + Npgsql en persistencia, Flyway en migraciones, xUnit + Testcontainers en testing y Docker Compose en desarrollo local). Esta selección preserva intacta la línea base lógica v1.0 y el diseño físico v1.0. Los [bounded contexts](../03-domain/bounded-contexts.md) se estructuran como módulos desacoplados dentro del monolito modular. La autenticación Bearer reutilizable del backend se rige por los [invariantes de autenticación](authentication-invariants.md).
 
 ## Principios técnicos
 
@@ -58,4 +58,5 @@ No se crean entidades de framework, endpoints ni infraestructura durante esta et
 - [OQ-ARCH-008](../06-decisions/README.md#oq-arch-008): ¿Qué criterios se usarán para evaluar Frontend technology?
 - [OQ-ARCH-009](../06-decisions/README.md#oq-arch-009): ¿Qué Persistence strategy preservará integridad y consistencia?
 - [OQ-ARCH-010](../06-decisions/README.md#oq-arch-010): ¿Qué Authentication strategy cumplirá las necesidades de identidad y seguridad?
+- [OQ-ARCH-017](../06-decisions/README.md#oq-arch-017): ¿Qué Authorization strategy aplicará el backend a los recursos de Yusay?
 - [OQ-DOM-026](../03-domain/aggregate-candidates.md#oq-dom-026): ¿Qué operaciones requieren consistencia atómica y cuáles admiten información derivada?

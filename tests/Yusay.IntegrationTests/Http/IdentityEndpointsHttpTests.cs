@@ -248,16 +248,27 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal(
             new[]
             {
-                "/auth/register", "/auth/sign-in", "/auth/sign-out", "/auth/verify-email", "/health"
+                "/auth/password-reset/confirm", "/auth/password-reset/request", "/auth/register",
+                "/auth/sign-in", "/auth/sign-out", "/auth/verify-email", "/health"
             },
             routeNames);
 
         // Nombres OpenAPI de operación conservados tras la migración a Controllers
         Assert.Equal("RegisterUser", ReadOperationId(paths, "/auth/register", "post"));
+        Assert.Equal("RequestPasswordReset", ReadOperationId(paths, "/auth/password-reset/request", "post"));
+        Assert.Equal("ResetPassword", ReadOperationId(paths, "/auth/password-reset/confirm", "post"));
         Assert.Equal("SignIn", ReadOperationId(paths, "/auth/sign-in", "post"));
         Assert.Equal("VerifyEmail", ReadOperationId(paths, "/auth/verify-email", "post"));
         Assert.Equal("SignOut", ReadOperationId(paths, "/auth/sign-out", "post"));
         Assert.Equal("HealthCheck", ReadOperationId(paths, "/health", "get"));
+
+        // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
+        // ProblemDetails 400/401/503 — nunca el 200 fantasma que genera MVC sin metadatos
+        var signOutResponses = paths.GetProperty("/auth/sign-out").GetProperty("post")
+            .GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "204", "400", "401", "503" }, signOutResponses);
 
         // El contrato de solicitud sigue siendo JSON con el esquema del DTO
         var requestBody = paths.GetProperty("/auth/register").GetProperty("post").GetProperty("requestBody");

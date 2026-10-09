@@ -35,7 +35,10 @@ public static class DependencyInjection
 
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();
+        // PROVISIONALES — sin proveedor real de correo: descartan los tokens sin enviar nada.
+        // NO APTOS PARA PRODUCCIÓN hasta incorporar un proveedor externo con outbox/reintentos.
         services.AddSingleton<IEmailVerificationSender, Emailing.NullEmailVerificationSender>();
+        services.AddSingleton<IPasswordResetEmailSender, Emailing.NullPasswordResetEmailSender>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddSingleton(CreateJwtOptions(configuration));
         services.AddSingleton<IJwtTokenService, JwtTokenService>();

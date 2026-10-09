@@ -12,13 +12,15 @@ public sealed class RequestPasswordResetUseCase(
     IUserAccountRepository userAccountRepository,
     IPasswordResetTokenRepository resetTokenRepository,
     IAuditEventRepository auditEventRepository,
-    ISecureTokenService tokenService) : IRequestPasswordResetUseCase
+    ISecureTokenService tokenService,
+    IPasswordResetEmailSender passwordResetEmailSender) : IRequestPasswordResetUseCase
 {
     private readonly IUnitOfWork _unitOfWork = unitOfWork;
     private readonly IUserAccountRepository _userAccountRepository = userAccountRepository;
     private readonly IPasswordResetTokenRepository _resetTokenRepository = resetTokenRepository;
     private readonly IAuditEventRepository _auditEventRepository = auditEventRepository;
     private readonly ISecureTokenService _tokenService = tokenService;
+    private readonly IPasswordResetEmailSender _passwordResetEmailSender = passwordResetEmailSender;
 
     public async Task<RequestPasswordResetResult> ExecuteAsync(RequestPasswordResetCommand command, CancellationToken cancellationToken = default)
     {
@@ -29,7 +31,7 @@ public sealed class RequestPasswordResetUseCase(
 
         var email = Email.Create(command.Email);
 
-        return await _unitOfWork.ExecuteInTransactionAsync(async tx =>
+        var result = await _unitOfWork.ExecuteInTransactionAsync(async tx =>
         {
             var user = await _userAccountRepository.GetByEmailAsync(email, tx, cancellationToken);
             if (user is null)
@@ -52,5 +54,15 @@ public sealed class RequestPasswordResetUseCase(
 
             return new RequestPasswordResetResult(EmailSent: true, ResetToken: rawToken);
         }, cancellationToken);
+
+        if (result.ResetToken is not null)
+        {
+            await _passwordResetEmailSender.SendPasswordResetTokenAsync(
+                email.Value,
+                result.ResetToken,
+                cancellationToken);
+        }
+
+        return result;
     }
 }

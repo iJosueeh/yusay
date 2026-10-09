@@ -4,6 +4,7 @@ using Yusay.Domain.Common;
 using Yusay.Domain.Identity.Entities;
 using Yusay.Domain.Identity.ValueObjects;
 using Yusay.Domain.UnitTests.Identity.Fakes;
+using Yusay.Infrastructure.Emailing;
 using Yusay.Infrastructure.Identity.Services;
 
 namespace Yusay.Domain.UnitTests.Identity;
@@ -21,7 +22,8 @@ public class RequestPasswordResetUseCaseTests
         _userAccountRepo,
         _resetTokenRepo,
         _auditEventRepo,
-        _tokenService);
+        _tokenService,
+        new NullPasswordResetEmailSender());
 
     [Fact]
     public async Task ExecuteAsync_WhenUserExists_ShouldIssue30MinTokenAndInvalidatePriorTokensAndAudit()

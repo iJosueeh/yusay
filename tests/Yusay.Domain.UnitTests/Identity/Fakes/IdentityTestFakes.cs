@@ -255,3 +255,17 @@ public sealed class FakeEmailVerificationSender : IEmailVerificationSender
         return Task.CompletedTask;
     }
 }
+
+/// <summary>
+/// Doble de <see cref="ICurrentUser"/> para pruebas unitarias de casos de uso (F1 de N1):
+/// fija la identidad corriente —o su ausencia con <c>null</c>— sin depender de ASP.NET Core.
+/// </summary>
+public sealed class FakeCurrentUser : ICurrentUser
+{
+    public FakeCurrentUser(Guid? userId = null)
+    {
+        UserId = userId;
+    }
+
+    public Guid? UserId { get; set; }
+}

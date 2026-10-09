@@ -73,7 +73,7 @@ public sealed class SignInIntegrationTests
         _unitOfWork, _userAccountRepo, _verificationTokenRepo, _auditEventRepo, _tokenService);
 
     private RequestPasswordResetUseCase CreateRequestResetUseCase() => new(
-        _unitOfWork, _userAccountRepo, _resetTokenRepo, _auditEventRepo, _tokenService);
+        _unitOfWork, _userAccountRepo, _resetTokenRepo, _auditEventRepo, _tokenService, new NullPasswordResetEmailSender());
 
     private ResetPasswordUseCase CreateResetPasswordUseCase() => new(
         _unitOfWork, _userAccountRepo, _userCredentialRepo, _resetTokenRepo, _auditEventRepo, _passwordHasher, _tokenService);

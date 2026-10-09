@@ -1,4 +1,6 @@
 using Dapper;
+using Microsoft.AspNetCore.Authentication;
+using Yusay.Api.Authentication;
 using Yusay.Api.Common;
 using Yusay.Application;
 using Yusay.Application.Common.Interfaces;
@@ -21,6 +23,17 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
+builder.Services.AddAuthentication(BearerAuthenticationHandler.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, BearerAuthenticationHandler>(
+        BearerAuthenticationHandler.SchemeName,
+        options => { });
+
+// Identidad corriente (F1 de N1, OQ-ARCH-017): el adaptador lee el principal ya validado por
+// el handler —sin segunda validación JWT ni consulta a Redis— y se registra con ciclo de vida
+// scoped, igual que la petición que lo resuelve.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -31,6 +44,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/health", async (IDbConnectionFactory connectionFactory) =>
 {
