@@ -5,9 +5,11 @@ using Npgsql;
 using Yusay.Application.Common.Interfaces;
 using Yusay.Application.Identity.Repositories;
 using Yusay.Application.Identity.Tokens;
+using Yusay.Application.Tracking.Repositories;
 using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
+using Yusay.Infrastructure.Tracking.Repositories;
 
 namespace Yusay.Infrastructure;
 
@@ -32,6 +34,8 @@ public static class DependencyInjection
         services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+        services.AddScoped<ICheckInRepository, CheckInRepository>();
+        services.AddScoped<IDimensionVersionRepository, DimensionVersionRepository>();
 
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();

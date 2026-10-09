@@ -15,6 +15,8 @@ public static class DependencyInjection
         services.AddScoped<Identity.Commands.SignIn.ISignInUseCase, Identity.Commands.SignIn.SignInUseCase>();
         services.AddScoped<Identity.Commands.SignOut.ISignOutUseCase, Identity.Commands.SignOut.SignOutUseCase>();
         services.AddScoped<Identity.Queries.ValidateAccessToken.IValidateAccessTokenUseCase, Identity.Queries.ValidateAccessToken.ValidateAccessTokenUseCase>();
+        services.AddScoped<Tracking.Commands.CreateCheckIn.ICreateCheckInUseCase, Tracking.Commands.CreateCheckIn.CreateCheckInUseCase>();
+        services.AddScoped<Tracking.Queries.GetCheckInById.IGetCheckInByIdUseCase, Tracking.Queries.GetCheckInById.GetCheckInByIdUseCase>();
 
         return services;
     }

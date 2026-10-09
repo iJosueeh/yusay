@@ -241,7 +241,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         using var parsed = JsonDocument.Parse(document);
         var paths = parsed.RootElement.GetProperty("paths");
 
-        // Sin rutas duplicadas ni nuevas: exactamente las rutas acordadas
+        // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + F2a CheckIn)
         var routeNames = paths.EnumerateObject()
             .Select(path => path.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
@@ -249,7 +249,8 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
             new[]
             {
                 "/auth/password-reset/confirm", "/auth/password-reset/request", "/auth/register",
-                "/auth/sign-in", "/auth/sign-out", "/auth/verify-email", "/health"
+                "/auth/sign-in", "/auth/sign-out", "/auth/verify-email",
+                "/check-ins", "/check-ins/{checkInId}", "/health"
             },
             routeNames);
 
@@ -260,6 +261,8 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("SignIn", ReadOperationId(paths, "/auth/sign-in", "post"));
         Assert.Equal("VerifyEmail", ReadOperationId(paths, "/auth/verify-email", "post"));
         Assert.Equal("SignOut", ReadOperationId(paths, "/auth/sign-out", "post"));
+        Assert.Equal("CreateCheckIn", ReadOperationId(paths, "/check-ins", "post"));
+        Assert.Equal("GetCheckInById", ReadOperationId(paths, "/check-ins/{checkInId}", "get"));
         Assert.Equal("HealthCheck", ReadOperationId(paths, "/health", "get"));
 
         // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
