@@ -40,7 +40,7 @@ Baseline de reglas del modelo conceptual v0.1, sin definir tablas ni clases. Las
 - **RN-019:** Un CheckIn pertenece exactamente a un User y no es un AssessmentAttempt.
 - **RN-020:** Cada Measurement conserva la DimensionVersion exacta utilizada y respeta su definición de medición. Dimension es la identidad estable; escalas, unidades y rangos concretos permanecen abiertos.
 - **RN-021:** Yusay administra las Dimensions y permite configurarlas sin modificar código. El User no crea dimensiones arbitrarias durante el MVP.
-- **RN-022:** Modificar y eliminar un CheckIn requiere respetar reglas explícitas. Ventanas, condiciones, efectos sobre historia y auditoría permanecen **Status: OPEN**.
+- **RN-022:** Modificar y eliminar un CheckIn requiere respetar reglas explícitas. La edición está permitida solo al propietario autenticado, dentro de la ventana absoluta de 168 horas desde `created_at` con límite superior estricto y bajo concurrencia optimista mediante `revision`, según OQ-DOM-008. La eliminación está permitida solo al propietario autenticado, exige `revision` esperada, puede realizarse en cualquier momento y suprime físicamente el CheckIn y sus Measurements por cascada, según OQ-DOM-009. Los registros eliminados se excluyen de Timeline y Trend, y ninguna de las dos operaciones genera `audit_event`.
 
 ## Comparison
 
@@ -144,7 +144,8 @@ Baseline de reglas del modelo conceptual v0.1, sin definir tablas ni clases. Las
 - **Pregunta:** ¿Qué condiciones permiten modificar un CheckIn?
 - **Motivo:** Concretar una función MUST sin fijar una ventana arbitraria.
 - **Impacto:** RN-022, RF-011 y tendencias derivadas.
-- **Status:** OPEN.
+- **Status:** RESOLVED.
+- **Resolución:** Edición solo por el propietario autenticado mediante PUT, dentro de una ventana absoluta de 168 horas desde `created_at` con límite superior estricto. `revision` esperada obligatoria e incremento exacto de uno, con `updated_at` actualizado en la misma transacción. El conjunto de dimensiones es inmutable y cada valor se valida contra la DimensionVersion originalmente almacenada, incluso RETIRED; `recorded_at` conserva su ventana física y `user_id`, `check_in_id` y `created_at` permanecen inmutables. Respuesta 200 con la representación actualizada; un recurso ajeno o inexistente devuelve 404 uniforme; una `revision` desactualizada o la expiración de la ventana devuelven 409, únicamente tras verificar la propiedad. No se genera `audit_event`, porque V011 no contempla operaciones de CheckIn.
 
 ### OQ-DOM-009
 
@@ -152,7 +153,8 @@ Baseline de reglas del modelo conceptual v0.1, sin definir tablas ni clases. Las
 - **Pregunta:** ¿Qué condiciones y efectos tiene eliminar un CheckIn?
 - **Motivo:** Delimitar eliminación y sus consecuencias sobre historia y auditoría.
 - **Impacto:** RN-022, RF-011 y RNF-007.
-- **Status:** OPEN.
+- **Status:** RESOLVED.
+- **Resolución:** Eliminación física definitiva del CheckIn y sus Measurements por cascada, disponible solo para el propietario autenticado y en cualquier momento, sin ventana temporal, con `revision` esperada obligatoria. DELETE exitoso devuelve 204; un recurso repetido, ajeno o inexistente devuelve 404 uniforme; una `revision` desactualizada devuelve 409, únicamente tras verificar la propiedad. No se genera `audit_event`, porque V011 no contempla operaciones de CheckIn. Timeline y Trend deben excluir los registros eliminados. La supresión no afirma la purga inmediata de los respaldos.
 
 ### OQ-DOM-010
 

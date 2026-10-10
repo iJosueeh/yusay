@@ -60,7 +60,7 @@ Cada transición terminal elimina Answers parciales atómicamente. El orden cohe
        AND $new_recorded_at <= created_at;
      ```
    - Si la sentencia retorna `0` filas actualizadas, la transacción detecta el fallo y determina la causa:
-     * Si `clock_timestamp() >= created_at + interval '168 hours'`: Rechazo por expiración de la ventana de edición (`422 Unprocessable Entity` / Regla de negocio).
+     * Si `clock_timestamp() >= created_at + interval '168 hours'`: Rechazo por expiración de la ventana de edición (`409 Conflict` / Regla de negocio).
      * Si la revisión actual en la base de datos es distinta de `$expected_revision`: Conflicto de concurrencia optimista (`409 Conflict`). Rollback limpio.
    - **Edición de Mediciones (`MEASUREMENT`):**
      * En la misma transacción, se actualizan los valores de las mediciones existentes:

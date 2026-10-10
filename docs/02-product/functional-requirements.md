@@ -72,7 +72,7 @@ Baseline documental derivado del [alcance](scope.md) y la [definición del produ
 
 ### RF-011
 - **Name:** Modificar y eliminar CheckIn.
-- **Description:** Permitir modificar y eliminar check-ins propios conforme a reglas que deben definirse antes de implementar estas operaciones.
+- **Description:** Permitir modificar (PUT) y eliminar (DELETE) check-ins propios conforme a las reglas resueltas en [OQ-DOM-008](business-rules.md#oq-dom-008) y [OQ-DOM-009](business-rules.md#oq-dom-009): propiedad exclusiva del autor autenticado, concurrencia optimista mediante `revision`, ventana absoluta de 168 horas solo para la edición (la eliminación está permitida en cualquier momento), borrado físico en cascada con exclusión de los registros eliminados en Timeline y Trend, 200 con representación actualizada en edición, 204 en eliminación y respuestas uniformes 404/409.
 - **Priority:** MUST.
 - **Status:** PROPOSED.
 
@@ -287,7 +287,5 @@ Baseline documental derivado del [alcance](scope.md) y la [definición del produ
 - [OQ-PROD-002](../01-discovery/target-users.md#oq-prod-002): ¿Qué información podrá consultar un Visitor?
 - [OQ-PROD-005](product-definition.md#oq-prod-005): ¿Cómo se capturará el contexto personal mínimo?
 - [OQ-DOM-003](business-rules.md#oq-dom-003): ¿Qué respuestas son obligatorias para enviar un intento?
-- [OQ-DOM-008](business-rules.md#oq-dom-008): ¿Qué condiciones permiten modificar un CheckIn?
-- [OQ-DOM-009](business-rules.md#oq-dom-009): ¿Qué condiciones y efectos tiene eliminar un CheckIn?
 - [OQ-DOM-013](business-rules.md#oq-dom-013): ¿Qué datos podrá incluir un reporte compartido opcional?
 - [OQ-DOM-014](business-rules.md#oq-dom-014): ¿Qué vigencia y revocación tendrá un enlace temporal compartido?
