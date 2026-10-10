@@ -71,7 +71,8 @@ public sealed class CreateCheckInUseCase(
                         $"La Dimensión {input.DimensionId} no tiene una versión de escala activa.");
                 }
 
-                ValidateScaleValue(input.DimensionId, input.Value, scale);
+                ScaleValueValidation.EnsureReachable(
+                    input.DimensionId, input.Value, scale.MinValue, scale.MaxValue, scale.Step);
                 measurements.Add(Measurement.Create(input.DimensionId, scale.DimensionVersionId, input.Value));
             }
 
@@ -91,21 +92,5 @@ public sealed class CreateCheckInUseCase(
             checkIn.RecordedAt,
             checkIn.CreatedAt,
             checkIn.Revision);
-    }
-
-    private static void ValidateScaleValue(Guid dimensionId, int value, ActiveDimensionScale scale)
-    {
-        if (value < scale.MinValue || value > scale.MaxValue)
-        {
-            throw new ValidationException(
-                $"El valor {value} de la Dimensión {dimensionId} está fuera de la escala [{scale.MinValue}, {scale.MaxValue}].");
-        }
-
-        var offsetFromMin = (long)value - scale.MinValue;
-        if (offsetFromMin % scale.Step != 0)
-        {
-            throw new ValidationException(
-                $"El valor {value} de la Dimensión {dimensionId} no es alcanzable con paso {scale.Step} desde el mínimo {scale.MinValue}.");
-        }
     }
 }

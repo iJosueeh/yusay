@@ -8,4 +8,17 @@ public interface ICheckInRepository
     Task<DateTimeOffset> GetDatabaseTimestampAsync(DbTransaction? transaction = null, CancellationToken cancellationToken = default);
     Task CreateAsync(CheckIn checkIn, DbTransaction? transaction = null, CancellationToken cancellationToken = default);
     Task<CheckIn?> GetByIdOwnedAsync(Guid checkInId, Guid ownerId, DbTransaction? transaction = null, CancellationToken cancellationToken = default);
+    Task<bool> TryUpdateOwnedAsync(
+        Guid checkInId,
+        Guid ownerId,
+        int expectedRevision,
+        DateTimeOffset recordedAt,
+        string? note,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
+    Task<int> TryUpdateOwnedMeasurementsAsync(
+        Guid checkInId,
+        IReadOnlyList<Measurement> measurements,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
 }

@@ -155,6 +155,76 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         }, cancellationToken);
     }
 
+    public async Task<bool> TryUpdateOwnedAsync(
+        Guid checkInId,
+        Guid ownerId,
+        int expectedRevision,
+        DateTimeOffset recordedAt,
+        string? note,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Sentencia condicional atómica de MP-PHYS-007: revisión esperada y ventana
+        // absoluta de 168 horas (límite superior estricto) evaluadas en la base de datos.
+        // El CTE MATERIALIZED evalúa clock_timestamp() una única vez por operación y ese
+        // mismo instante alimenta tanto la guarda de la ventana como updated_at: la edición
+        // confirmada nunca queda fechada fuera de la ventana que autorizó la operación.
+        const string sql = """
+            WITH instant AS MATERIALIZED (
+                SELECT clock_timestamp() AS now_instant
+            )
+            UPDATE yusay.check_in
+            SET revision = revision + 1,
+                updated_at = instant.now_instant,
+                recorded_at = @RecordedAt,
+                note = @Note
+            FROM instant
+            WHERE check_in_id = @CheckInId
+              AND user_id = @OwnerId
+              AND revision = @ExpectedRevision
+              AND instant.now_instant < created_at + interval '168 hours';
+            """;
+
+        return await ExecuteWithConnectionAsync(transaction, async conn =>
+        {
+            var affected = await conn.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { CheckInId = checkInId, OwnerId = ownerId, ExpectedRevision = expectedRevision, RecordedAt = recordedAt, Note = note },
+                transaction,
+                cancellationToken: cancellationToken));
+            return affected == 1;
+        }, cancellationToken);
+    }
+
+    public async Task<int> TryUpdateOwnedMeasurementsAsync(
+        Guid checkInId,
+        IReadOnlyList<Measurement> measurements,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Solo cambia value: dimension_version_id es inmutable (RN-020/OQ-DOM-008).
+        const string sql = """
+            UPDATE yusay.measurement
+            SET value = @Value
+            WHERE check_in_id = @CheckInId AND dimension_id = @DimensionId;
+            """;
+
+        return await ExecuteWithConnectionAsync(transaction, async conn =>
+        {
+            var affected = 0;
+            foreach (var measurement in measurements)
+            {
+                affected += await conn.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new { CheckInId = checkInId, measurement.DimensionId, measurement.Value },
+                    transaction,
+                    cancellationToken: cancellationToken));
+            }
+
+            return affected;
+        }, cancellationToken);
+    }
+
     private async Task<T> ExecuteWithConnectionAsync<T>(
         DbTransaction? transaction,
         Func<DbConnection, Task<T>> action,

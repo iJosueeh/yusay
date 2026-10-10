@@ -241,7 +241,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         using var parsed = JsonDocument.Parse(document);
         var paths = parsed.RootElement.GetProperty("paths");
 
-        // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + F2a CheckIn)
+        // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + CheckIn F2a/F2b-1)
         var routeNames = paths.EnumerateObject()
             .Select(path => path.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
@@ -263,7 +263,16 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("SignOut", ReadOperationId(paths, "/auth/sign-out", "post"));
         Assert.Equal("CreateCheckIn", ReadOperationId(paths, "/check-ins", "post"));
         Assert.Equal("GetCheckInById", ReadOperationId(paths, "/check-ins/{checkInId}", "get"));
+        Assert.Equal("UpdateCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "put"));
         Assert.Equal("HealthCheck", ReadOperationId(paths, "/health", "get"));
+
+        // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
+        // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)
+        var updateResponses = paths.GetProperty("/check-ins/{checkInId}").GetProperty("put")
+            .GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "400", "401", "404", "409", "503" }, updateResponses);
 
         // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
         // ProblemDetails 400/401/503 — nunca el 200 fantasma que genera MVC sin metadatos

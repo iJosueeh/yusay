@@ -20,10 +20,12 @@ using Yusay.IntegrationTests.Infrastructure;
 namespace Yusay.IntegrationTests.Http;
 
 /// <summary>
-/// Pruebas HTTP de CheckIn (F2a de N1): creación y lectura propias, 404 uniforme para
-/// recurso ajeno e inexistente (comparando los campos públicos de ProblemDetails salvo
-/// traceId), RN-026 (el administrador no accede a check-ins privados ajenos), validaciones
-/// de escala/ventana/mediciones y regresión del gate de autenticación.
+/// Pruebas HTTP de CheckIn (F2a de N1 + F2b-1): creación y lectura propias, edición
+/// optimista con ventana absoluta de 168 horas, 404 uniforme para recurso ajeno e
+/// inexistente (comparando los campos públicos de ProblemDetails salvo traceId),
+/// RN-026 (el administrador no accede a check-ins privados ajenos), validaciones de
+/// escala/ventana/mediciones, carrera de dos ediciones con la misma revisión y
+/// regresión del gate de autenticación.
 /// </summary>
 [Collection("DatabaseCollection")]
 public sealed class CheckInHttpTests : IAsyncLifetime
@@ -380,6 +382,569 @@ public sealed class CheckInHttpTests : IAsyncLifetime
     }
 
     // ------------------------------------------------------------------------------------------
+    // PUT /check-ins/{id} (F2b-1): OQ-DOM-008 / RN-022 / MP-PHYS-007
+    // ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Put_WithValidBody_ShouldUpdateOwnedCheckInAndReturn200Representation()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, versionId) = await SeedDimensionAsync(0, 10, 1);
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        using var before = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var createdAt = before.RootElement.GetProperty("createdAt").GetDateTimeOffset();
+        var originalRecordedAt = before.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+        Assert.Equal(1, before.RootElement.GetProperty("revision").GetInt32());
+        Assert.Equal(JsonValueKind.Null, before.RootElement.GetProperty("updatedAt").ValueKind);
+
+        var correctedRecordedAt = originalRecordedAt.AddHours(-2);
+        using var putClient = factory.CreateClient();
+        var response = await SendAsync(putClient, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt = correctedRecordedAt,
+            note = "Corregido",
+            measurements = new[] { new { dimensionId, value = 7 } }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(checkInId, body.RootElement.GetProperty("checkInId").GetGuid());
+        Assert.Equal(2, body.RootElement.GetProperty("revision").GetInt32()); // incremento exacto de uno
+        Assert.NotEqual(JsonValueKind.Null, body.RootElement.GetProperty("updatedAt").ValueKind);
+        Assert.Equal("Corregido", body.RootElement.GetProperty("note").GetString());
+        Assert.Equal(correctedRecordedAt, body.RootElement.GetProperty("recordedAt").GetDateTimeOffset());
+        Assert.Equal(createdAt, body.RootElement.GetProperty("createdAt").GetDateTimeOffset()); // inmutable
+        var measurement = Assert.Single(body.RootElement.GetProperty("measurements").EnumerateArray());
+        Assert.Equal(dimensionId, measurement.GetProperty("dimensionId").GetGuid());
+        Assert.Equal(versionId, measurement.GetProperty("dimensionVersionId").GetGuid()); // versión almacenada intacta
+        Assert.Equal(7, measurement.GetProperty("value").GetInt32());
+
+        // La representación posterior de GET refleja exactamente la devuelta por PUT
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(2, after.RootElement.GetProperty("revision").GetInt32());
+        Assert.Equal("Corregido", after.RootElement.GetProperty("note").GetString());
+        Assert.Equal(correctedRecordedAt, after.RootElement.GetProperty("recordedAt").GetDateTimeOffset());
+        Assert.Equal(createdAt, after.RootElement.GetProperty("createdAt").GetDateTimeOffset());
+        Assert.Equal(7, after.RootElement.GetProperty("measurements").EnumerateArray()
+            .Single().GetProperty("value").GetInt32());
+    }
+
+    [Fact]
+    public async Task Put_WithoutOrWithGarbageToken_ShouldReturn401()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+        var payload = new
+        {
+            revision = 1,
+            recordedAt,
+            note = "sin identidad",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        };
+
+        using var anonymousClient = factory.CreateClient();
+        var anonymousResponse = await SendAsync(anonymousClient, HttpMethod.Put, $"/check-ins/{checkInId}", null, payload);
+
+        using var garbageClient = factory.CreateClient();
+        var garbageResponse = await SendAsync(garbageClient, HttpMethod.Put, $"/check-ins/{checkInId}", "garbage-token", payload);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, garbageResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_WithoutRevision_ShouldReturn400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            recordedAt,
+            note = "sin revisión",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "obligatoria");
+    }
+
+    [Fact]
+    public async Task Put_WithoutRecordedAt_ShouldReturn400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            note = "sin instante",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "recordedAt");
+    }
+
+    [Fact]
+    public async Task Put_WithoutMeasurements_ShouldReturn400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "sin mediciones"
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "al menos una Measurement");
+    }
+
+    [Fact]
+    public async Task Put_ForeignWithStaleRevisionAndNonexistent_ShouldReturnUniform404()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, tokenA) = await CreateSessionAsync(client);
+        var (_, tokenB) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var ownedId = await CreateCheckInAsync(factory, tokenA, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, ownedId, tokenA);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        // Revisión también desactualizada en el recurso ajeno: aún así prima el 404 de
+        // propiedad —el 409 exige verificar la propiedad antes de diagnosticar.
+        using var clientB = factory.CreateClient();
+        var foreignResponse = await SendAsync(clientB, HttpMethod.Put, $"/check-ins/{ownedId}", tokenB, new
+        {
+            revision = 999,
+            recordedAt,
+            note = "ajeno",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+        using var clientA2 = factory.CreateClient();
+        var nonexistentResponse = await SendAsync(clientA2, HttpMethod.Put,
+            $"/check-ins/{Guid.NewGuid()}", tokenA, new
+            {
+                revision = 1,
+                recordedAt,
+                note = "inexistente",
+                measurements = new[] { new { dimensionId, value = 4 } }
+            });
+
+        Assert.Equal(HttpStatusCode.NotFound, foreignResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, nonexistentResponse.StatusCode);
+
+        using var foreign = JsonDocument.Parse(await foreignResponse.Content.ReadAsStringAsync());
+        using var nonexistent = JsonDocument.Parse(await nonexistentResponse.Content.ReadAsStringAsync());
+        foreach (var field in new[] { "title", "detail", "status", "type" })
+        {
+            Assert.True(foreign.RootElement.TryGetProperty(field, out var foreignValue),
+                $"Falta el campo público {field} en el 404 de recurso ajeno.");
+            Assert.True(nonexistent.RootElement.TryGetProperty(field, out var nonexistentValue),
+                $"Falta el campo público {field} en el 404 de recurso inexistente.");
+            Assert.Equal(foreignValue.GetRawText(), nonexistentValue.GetRawText());
+        }
+        Assert.NotEqual(
+            foreign.RootElement.GetProperty("traceId").GetString(),
+            nonexistent.RootElement.GetProperty("traceId").GetString());
+    }
+
+    [Fact]
+    public async Task Put_WithAdministratorToken_ShouldReturn404ForForeignPrivateCheckIn_RN026()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, userToken) = await CreateSessionAsync(client);
+        var (adminUserId, adminToken) = await CreateSessionAsync(client);
+        await EnableAdministratorAsync(adminUserId);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var ownedId = await CreateCheckInAsync(factory, userToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, ownedId, userToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        using var adminClient = factory.CreateClient();
+        var response = await SendAsync(adminClient, HttpMethod.Put, $"/check-ins/{ownedId}", adminToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "administración",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        // RN-026: Administrator no obtiene automáticamente acceso a check-ins privados
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Put_WithStaleRevision_ShouldReturn409AndPreserveState()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        using var client2 = factory.CreateClient();
+        var first = await SendAsync(client2, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "primera edición",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        using var client3 = factory.CreateClient();
+        var second = await SendAsync(client3, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1, // la revisión vigente ya es 2
+            recordedAt,
+            note = "segunda edición",
+            measurements = new[] { new { dimensionId, value = 5 } }
+        });
+
+        await AssertProblemAsync(second, HttpStatusCode.Conflict, "revisión vigente");
+
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(2, after.RootElement.GetProperty("revision").GetInt32());
+        Assert.Equal("primera edición", after.RootElement.GetProperty("note").GetString());
+        Assert.Equal(4, after.RootElement.GetProperty("measurements").EnumerateArray()
+            .Single().GetProperty("value").GetInt32());
+    }
+
+    [Fact]
+    public async Task Put_TwoConcurrentRequestsWithSameRevision_ExactlyOneShouldSucceed()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var payload = new
+        {
+            revision = 1,
+            recordedAt,
+            note = "carrera",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        };
+
+        // Dos ediciones concurrentes con la misma revisión: exactamente una gana el
+        // compromiso optimista y la sentencia condicional decide en la base de datos.
+        var tasks = Enumerable.Range(0, 2)
+            .Select(_ =>
+            {
+                var concurrentClient = factory.CreateClient();
+                return SendAsync(concurrentClient, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, payload);
+            })
+            .ToArray();
+        var responses = await Task.WhenAll(tasks);
+
+        var statuses = responses.Select(response => response.StatusCode)
+            .OrderBy(status => status)
+            .ToArray();
+        Assert.Equal(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }, statuses);
+
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(2, after.RootElement.GetProperty("revision").GetInt32());
+        Assert.Equal("carrera", after.RootElement.GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public async Task Put_WhenEditWindowExpired_ShouldReturn409()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        // created_at queda 169 horas en el pasado: la ventana absoluta de 168 h expiró
+        await ShiftEditWindowAsync(checkInId, hours: 169);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+        Assert.Equal(1, representation.RootElement.GetProperty("revision").GetInt32());
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "fuera de ventana",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.Conflict, "ventana");
+    }
+
+    [Fact]
+    public async Task Put_WhileEditWindowRemainsOpenNearEdge_ShouldReturn200()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        // created_at a 167 horas: la ventana sigue abierta (borde inferior no alcanzado)
+        await ShiftEditWindowAsync(checkInId, hours: 167);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "cerca del borde",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(2, body.RootElement.GetProperty("revision").GetInt32());
+    }
+
+    [Theory]
+    [InlineData(1)]     // recordedAt posterior a created_at
+    [InlineData(-169)]  // recordedAt anterior a created_at - 168 h
+    public async Task Put_WithRecordedAtOutsidePhysicalWindow_ShouldReturn400(int hoursOffset)
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var baseInstant = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt = baseInstant.AddHours(hoursOffset),
+            note = "instante inválido",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "168 horas");
+    }
+
+    [Fact]
+    public async Task Put_WithRecordedAtAtExactWindowEdge_ShouldReturn200()
+    {
+        // Intervalo físico inclusivo: recorded_at == created_at - 168 h es válido en
+        // dominio y en el CHECK ck_check_in_recorded_window.
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var baseInstant = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt = baseInstant.AddHours(-168),
+            note = "borde físico",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(baseInstant.AddHours(-168), body.RootElement.GetProperty("recordedAt").GetDateTimeOffset());
+    }
+
+    [Fact]
+    public async Task Put_WithUnknownDimensionInBody_ShouldReturn400_ImmutableSet()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var (otherDimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "dimensión ajena",
+            measurements = new[] { new { dimensionId = otherDimensionId, value = 3 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "inmutable");
+    }
+
+    [Fact]
+    public async Task Put_WithMissingStoredDimensionInBody_ShouldReturn400_ImmutableSet()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync(0, 10, 1);
+        var (otherDimensionId, _) = await SeedDimensionAsync(0, 10, 1);
+
+        var created = await SendAsync(client, HttpMethod.Post, "/check-ins", accessToken, new
+        {
+            measurements = new[]
+            {
+                new { dimensionId, value = 3 },
+                new { dimensionId = otherDimensionId, value = 5 }
+            }
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var checkInId = await ReadGuidAsync(created, "checkInId");
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "dimensión retirada",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "inmutable");
+        Assert.Equal(2, representation.RootElement.GetProperty("measurements").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Put_WithValueOutsideStoredScale_ShouldReturn400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync(1, 5, 1);
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "escala excedida",
+            measurements = new[] { new { dimensionId, value = 7 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "fuera de la escala");
+    }
+
+    [Fact]
+    public async Task Put_WithMisalignedStepValue_ShouldReturn400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync(1, 9, 2); // válidos: 1, 3, 5, 7, 9
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId, value: 3);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "paso incorrecto",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "no es alcanzable con paso");
+    }
+
+    [Fact]
+    public async Task Put_WithRetiredDimensionVersion_ShouldValidateAgainstStoredScale()
+    {
+        // OQ-DOM-008: la edición valida contra la DimensionVersion originalmente
+        // almacenada incluso cuando la versión ya está RETIRED (y V015 congeló su escala).
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, versionId) = await SeedDimensionAsync(1, 5, 1);
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId, value: 3);
+
+        await RetireDimensionVersionAsync(versionId);
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var invalid = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "fuera de la escala almacenada",
+            measurements = new[] { new { dimensionId, value = 7 } }
+        });
+        await AssertProblemAsync(invalid, HttpStatusCode.BadRequest, "fuera de la escala");
+
+        var valid = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "editado con versión retirada",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, valid.StatusCode);
+
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var measurement = Assert.Single(after.RootElement.GetProperty("measurements").EnumerateArray());
+        Assert.Equal(versionId, measurement.GetProperty("dimensionVersionId").GetGuid()); // procedencia histórica
+        Assert.Equal(4, measurement.GetProperty("value").GetInt32());
+    }
+
+    [Fact]
+    public async Task Put_WithEmptyNote_ShouldClearNote()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId, note: "Original");
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = representation.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var response = await SendAsync(client, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "   ",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(JsonValueKind.Null, after.RootElement.GetProperty("note").ValueKind);
+    }
+
+    // ------------------------------------------------------------------------------------------
     // Composición
     // ------------------------------------------------------------------------------------------
 
@@ -446,6 +1011,54 @@ public sealed class CheckInHttpTests : IAsyncLifetime
         await connection.ExecuteAsync(new CommandDefinition(
             "INSERT INTO yusay.administrator (user_id) VALUES (@UserId);",
             new { UserId = userId }));
+    }
+
+    private async Task<Guid> CreateCheckInAsync(
+        WebApplicationFactory<Program> factory,
+        string accessToken,
+        Guid dimensionId,
+        int value = 3,
+        string? note = "Original")
+    {
+        using var client = factory.CreateClient();
+        var response = await SendAsync(client, HttpMethod.Post, "/check-ins", accessToken, new
+        {
+            note,
+            measurements = new[] { new { dimensionId, value } }
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return await ReadGuidAsync(response, "checkInId");
+    }
+
+    private async Task<JsonDocument> GetRepresentationAsync(
+        WebApplicationFactory<Program> factory,
+        Guid checkInId,
+        string accessToken)
+    {
+        using var client = factory.CreateClient();
+        var response = await SendAsync(client, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+    }
+
+    /// <summary>Desplaza created_at y recorded_at hacia el pasado conservando la ventana física.</summary>
+    private async Task ShiftEditWindowAsync(Guid checkInId, int hours)
+    {
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        await connection.ExecuteAsync(new CommandDefinition("""
+            UPDATE yusay.check_in
+            SET created_at = created_at - (@Hours::double precision * interval '1 hour'),
+                recorded_at = recorded_at - (@Hours::double precision * interval '1 hour')
+            WHERE check_in_id = @CheckInId;
+            """, new { CheckInId = checkInId, Hours = hours }));
+    }
+
+    private async Task RetireDimensionVersionAsync(Guid versionId)
+    {
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE yusay.dimension_version SET status = 'RETIRED' WHERE dimension_version_id = @VersionId;",
+            new { VersionId = versionId }));
     }
 
     // La revocación usa el flujo real: SignOut denylista el jti en Redis (patrón Bearer)
