@@ -58,11 +58,7 @@ public sealed class UpdateCheckInUseCase(
         var updatedCheckIn = await _unitOfWork.ExecuteInTransactionAsync(async transaction =>
         {
             var current = await _checkInRepository.GetByIdOwnedAsync(
-                command.CheckInId, ownerId.Value, transaction, cancellationToken);
-            if (current is null)
-            {
-                throw new NotFoundException("El CheckIn solicitado no existe.");
-            }
+                command.CheckInId, ownerId.Value, transaction, cancellationToken) ?? throw new NotFoundException("El CheckIn solicitado no existe.");
 
             var storedByDimension = current.Measurements.ToDictionary(measurement => measurement.DimensionId);
             foreach (var input in command.Measurements)
@@ -73,12 +69,8 @@ public sealed class UpdateCheckInUseCase(
                 }
 
                 var scale = await _dimensionVersionRepository.GetScaleByVersionIdAsync(
-                    storedMeasurement.DimensionVersionId, transaction, cancellationToken);
-                if (scale is null)
-                {
-                    throw new ConflictException(
+                    storedMeasurement.DimensionVersionId, transaction, cancellationToken) ?? throw new ConflictException(
                         $"La DimensionVersion registrada para la Dimensión {input.DimensionId} no existe.");
-                }
 
                 ScaleValueValidation.EnsureReachable(
                     input.DimensionId, input.Value, scale.MinValue, scale.MaxValue, scale.Step);
@@ -103,11 +95,7 @@ public sealed class UpdateCheckInUseCase(
             if (!applied)
             {
                 var actual = await _checkInRepository.GetByIdOwnedAsync(
-                    command.CheckInId, ownerId.Value, transaction, cancellationToken);
-                if (actual is null)
-                {
-                    throw new NotFoundException("El CheckIn solicitado no existe.");
-                }
+                    command.CheckInId, ownerId.Value, transaction, cancellationToken) ?? throw new NotFoundException("El CheckIn solicitado no existe.");
 
                 var databaseNow = await _checkInRepository.GetDatabaseTimestampAsync(transaction, cancellationToken);
                 if (databaseNow >= actual.CreatedAt + TimeSpan.FromHours(168))
@@ -133,11 +121,7 @@ public sealed class UpdateCheckInUseCase(
             }
 
             var refreshed = await _checkInRepository.GetByIdOwnedAsync(
-                command.CheckInId, ownerId.Value, transaction, cancellationToken);
-            if (refreshed is null)
-            {
-                throw new ConflictException("El CheckIn dejó de existir durante la actualización.");
-            }
+                command.CheckInId, ownerId.Value, transaction, cancellationToken) ?? throw new ConflictException("El CheckIn dejó de existir durante la actualización.");
 
             return refreshed;
         }, cancellationToken);

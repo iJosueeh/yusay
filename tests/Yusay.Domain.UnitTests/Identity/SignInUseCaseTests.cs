@@ -1,6 +1,5 @@
 using Yusay.Application.Common.Exceptions;
 using Yusay.Application.Identity.Commands.SignIn;
-using Yusay.Application.Identity.Tokens;
 using Yusay.Domain.Identity.Entities;
 using Yusay.Domain.Identity.Enums;
 using Yusay.Domain.Identity.ValueObjects;
@@ -10,9 +9,6 @@ using Yusay.Infrastructure.Identity.Services;
 
 namespace Yusay.Domain.UnitTests.Identity;
 
-/// <summary>
-/// Autenticación con credenciales: Argon2id, reglas de acceso y auditoría V011 (perfiles N y F).
-/// </summary>
 public class SignInUseCaseTests
 {
     private const string ExpectedFailureMetadata = """{"reason_code":"CREDENTIALS_NOT_ACCEPTED"}""";
@@ -69,10 +65,6 @@ public class SignInUseCaseTests
         return user;
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Credenciales válidas
-    // ------------------------------------------------------------------------------------------
-
     [Fact]
     public async Task ExecuteAsync_WithValidCredentials_ShouldIssueUsableTokenAndAuditSignInSucceeded()
     {
@@ -125,10 +117,6 @@ public class SignInUseCaseTests
         Assert.Null(audit.Metadata);
         Assert.DoesNotContain(result.AccessToken, audit.Metadata ?? string.Empty, StringComparison.Ordinal);
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Credenciales inválidas
-    // ------------------------------------------------------------------------------------------
 
     [Fact]
     public async Task ExecuteAsync_WithWrongPassword_ShouldRejectAndAuditSignInFailed()
@@ -201,10 +189,6 @@ public class SignInUseCaseTests
         Assert.Equal(ExpectedFailureMetadata, audit.Metadata);
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Reglas de acceso: BLOCKED y correo verificado
-    // ------------------------------------------------------------------------------------------
-
     [Fact]
     public async Task ExecuteAsync_WithBlockedAccount_ShouldRejectDespiteValidPassword()
     {
@@ -261,10 +245,6 @@ public class SignInUseCaseTests
         Assert.Contains("bloqueada", exception.Message, StringComparison.Ordinal);
         Assert.Equal(UserAccountStatus.Blocked, _userAccountRepo.Users.Single().Status);
     }
-
-    // ------------------------------------------------------------------------------------------
-    // Validación de entrada
-    // ------------------------------------------------------------------------------------------
 
     [Theory]
     [InlineData("", "AnyPassword#2026")]
