@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<Tracking.Queries.GetCheckInById.IGetCheckInByIdUseCase, Tracking.Queries.GetCheckInById.GetCheckInByIdUseCase>();
         services.AddScoped<Tracking.Commands.UpdateCheckIn.IUpdateCheckInUseCase, Tracking.Commands.UpdateCheckIn.UpdateCheckInUseCase>();
         services.AddScoped<Tracking.Commands.DeleteCheckIn.IDeleteCheckInUseCase, Tracking.Commands.DeleteCheckIn.DeleteCheckInUseCase>();
+        services.AddScoped<Tracking.Queries.ListCheckIns.IListCheckInsUseCase, Tracking.Queries.ListCheckIns.ListCheckInsUseCase>();
 
         return services;
     }

@@ -5,6 +5,7 @@ using Yusay.Application.Tracking.Commands.CreateCheckIn;
 using Yusay.Application.Tracking.Commands.DeleteCheckIn;
 using Yusay.Application.Tracking.Commands.UpdateCheckIn;
 using Yusay.Application.Tracking.Queries.GetCheckInById;
+using Yusay.Application.Tracking.Queries.ListCheckIns;
 
 namespace Yusay.Api.Controllers.Tracking;
 
@@ -16,12 +17,14 @@ public sealed class CheckInController(
     ICreateCheckInUseCase createCheckInUseCase,
     IGetCheckInByIdUseCase getCheckInByIdUseCase,
     IUpdateCheckInUseCase updateCheckInUseCase,
-    IDeleteCheckInUseCase deleteCheckInUseCase) : ControllerBase
+    IDeleteCheckInUseCase deleteCheckInUseCase,
+    IListCheckInsUseCase listCheckInsUseCase) : ControllerBase
 {
     private readonly ICreateCheckInUseCase _createCheckInUseCase = createCheckInUseCase;
     private readonly IGetCheckInByIdUseCase _getCheckInByIdUseCase = getCheckInByIdUseCase;
     private readonly IUpdateCheckInUseCase _updateCheckInUseCase = updateCheckInUseCase;
     private readonly IDeleteCheckInUseCase _deleteCheckInUseCase = deleteCheckInUseCase;
+    private readonly IListCheckInsUseCase _listCheckInsUseCase = listCheckInsUseCase;
 
     [HttpPost]
     [EndpointName("CreateCheckIn")]
@@ -46,6 +49,26 @@ public sealed class CheckInController(
         return Created(
             $"/check-ins/{result.CheckInId}",
             new CreateCheckInResponse(result.CheckInId, result.RecordedAt, result.CreatedAt, result.Revision));
+    }
+
+    [HttpGet]
+    [EndpointName("ListCheckIns")]
+    [ProducesResponseType(typeof(ListCheckInsResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<ListCheckInsResponse>> List(
+        int? limit,
+        string? cursor,
+        CancellationToken cancellationToken)
+    {
+        var result = await _listCheckInsUseCase.ExecuteAsync(
+            new ListCheckInsQuery(limit, cursor),
+            cancellationToken);
+
+        return Ok(new ListCheckInsResponse(
+            result.Items.Select(MapItem).ToArray(),
+            result.NextCursor));
     }
 
     [HttpGet("{checkInId:guid}")]
@@ -132,4 +155,18 @@ public sealed class CheckInController(
 
         return NoContent();
     }
+
+    private static GetCheckInByIdResponse MapItem(GetCheckInByIdResult item) => new(
+        item.CheckInId,
+        item.RecordedAt,
+        item.CreatedAt,
+        item.UpdatedAt,
+        item.Revision,
+        item.Note,
+        item.Measurements
+            .Select(measurement => new GetCheckInMeasurementResponse(
+                measurement.DimensionId,
+                measurement.DimensionVersionId,
+                measurement.Value))
+            .ToArray());
 }

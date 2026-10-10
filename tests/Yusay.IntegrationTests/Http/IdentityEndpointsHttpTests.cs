@@ -262,6 +262,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("VerifyEmail", ReadOperationId(paths, "/auth/verify-email", "post"));
         Assert.Equal("SignOut", ReadOperationId(paths, "/auth/sign-out", "post"));
         Assert.Equal("CreateCheckIn", ReadOperationId(paths, "/check-ins", "post"));
+        Assert.Equal("ListCheckIns", ReadOperationId(paths, "/check-ins", "get"));
         Assert.Equal("GetCheckInById", ReadOperationId(paths, "/check-ins/{checkInId}", "get"));
         Assert.Equal("UpdateCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "put"));
         Assert.Equal("DeleteCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "delete"));
@@ -294,6 +295,38 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         }
         Assert.True(deleteSchema.GetProperty("properties").TryGetProperty("revision", out _),
             "El requestBody del DELETE debe exponer la propiedad revision.");
+
+        // GET /check-ins (F2c / OQ-PROD-019) documenta exactamente sus códigos reales:
+        // 200 paginado y ProblemDetails 400/401/503, sin cuerpo de solicitud y con los
+        // parámetros de consulta limit y cursor
+        var listOperation = paths.GetProperty("/check-ins").GetProperty("get");
+        var listResponses = listOperation.GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "400", "401", "503" }, listResponses);
+        Assert.False(listOperation.TryGetProperty("requestBody", out _),
+            "GET /check-ins no debe documentar requestBody.");
+
+        var listParameters = listOperation.GetProperty("parameters").EnumerateArray()
+            .Select(parameter => (
+                Name: parameter.GetProperty("name").GetString(),
+                In: parameter.GetProperty("in").GetString()))
+            .ToArray();
+        Assert.Contains(("limit", "query"), listParameters);
+        Assert.Contains(("cursor", "query"), listParameters);
+
+        var listSchema = listOperation.GetProperty("responses").GetProperty("200")
+            .GetProperty("content").GetProperty("application/json").GetProperty("schema");
+        if (listSchema.TryGetProperty("$ref", out var listSchemaRef))
+        {
+            var listSchemaName = listSchemaRef.GetString()!.Split('/').Last();
+            listSchema = parsed.RootElement.GetProperty("components").GetProperty("schemas")
+                .GetProperty(listSchemaName);
+        }
+        Assert.True(listSchema.GetProperty("properties").TryGetProperty("items", out _),
+            "El 200 de GET /check-ins debe exponer la colección items.");
+        Assert.True(listSchema.GetProperty("properties").TryGetProperty("nextCursor", out _),
+            "El 200 de GET /check-ins debe exponer nextCursor.");
 
         // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
         // ProblemDetails 400/401/503 — nunca el 200 fantasma que genera MVC sin metadatos

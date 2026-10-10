@@ -134,6 +134,42 @@ public sealed class FakeCheckInRepository : ICheckInRepository
         CheckIns.RemoveAt(index);
         return Task.FromResult(true);
     }
+
+    public int ListOwnedCalls { get; private set; }
+    public int? LastFetchLimit { get; private set; }
+    public DateTimeOffset? LastCursorRecordedAt { get; private set; }
+    public Guid? LastCursorCheckInId { get; private set; }
+
+    public Task<IReadOnlyList<CheckIn>> ListOwnedPageAsync(
+        Guid ownerId,
+        int fetchLimit,
+        DateTimeOffset? cursorRecordedAt,
+        Guid? cursorCheckInId,
+        CancellationToken cancellationToken = default)
+    {
+        ListOwnedCalls++;
+        LastFetchLimit = fetchLimit;
+        LastCursorRecordedAt = cursorRecordedAt;
+        LastCursorCheckInId = cursorCheckInId;
+
+        IEnumerable<CheckIn> query = CheckIns.Where(c => c.UserId == ownerId);
+        if (cursorRecordedAt is not null && cursorCheckInId is not null)
+        {
+            var recordedAt = cursorRecordedAt.Value;
+            var checkInId = cursorCheckInId.Value;
+            query = query.Where(c =>
+                c.RecordedAt < recordedAt ||
+                (c.RecordedAt == recordedAt && c.CheckInId < checkInId));
+        }
+
+        var page = query
+            .OrderByDescending(c => c.RecordedAt)
+            .ThenByDescending(c => c.CheckInId)
+            .Take(fetchLimit)
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyList<CheckIn>>(page);
+    }
 }
 
 public sealed class FakeDimensionVersionRepository : IDimensionVersionRepository

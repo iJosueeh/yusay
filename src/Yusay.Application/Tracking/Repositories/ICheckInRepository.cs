@@ -28,4 +28,11 @@ public interface ICheckInRepository
         int expectedRevision,
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<CheckIn>> ListOwnedPageAsync(
+        Guid ownerId,
+        int fetchLimit,
+        DateTimeOffset? cursorRecordedAt,
+        Guid? cursorCheckInId,
+        CancellationToken cancellationToken = default);
 }

@@ -1291,6 +1291,394 @@ public sealed class CheckInHttpTests : IAsyncLifetime
     }
 
     // ------------------------------------------------------------------------------------------
+    // GET /check-ins (F2c / OQ-PROD-019): keyset, cursor Base64URL versionado, límites
+    // ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task List_WithoutCheckIns_ShouldReturn200WithEmptyItemsAndNullCursor()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(listClient, HttpMethod.Get, "/check-ins", accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var (items, nextCursor) = await ReadPageAsync(response);
+        Assert.Empty(items);
+        Assert.Null(nextCursor);
+    }
+
+    [Fact]
+    public async Task List_ShouldReturnItemsWithFieldsIdenticalToGetById()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId,
+            value: 4, note: "Detalle F2c");
+
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(listClient, HttpMethod.Get, "/check-ins?limit=1", accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var (items, nextCursor) = await ReadPageAsync(response);
+        var item = Assert.Single(items);
+        Assert.Null(nextCursor);
+        Assert.Equal(representation.RootElement.GetRawText(), item.GetRawText());
+    }
+
+    [Fact]
+    public async Task List_WithTiedRecordedAt_ShouldWalkEveryPageExactlyOnce()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var baseTime = DateTimeOffset.UtcNow.AddHours(-4);
+        var expected = new HashSet<Guid>
+        {
+            await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime),
+            await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(10)),
+            await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(10)),
+            await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(20)),
+            await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(30))
+        };
+
+        var visited = new List<JsonElement>();
+        var page = 0;
+        string? cursor = null;
+        do
+        {
+            var url = $"/check-ins?limit=2{(cursor is null ? string.Empty : $"&cursor={cursor}")}";
+            using var listClient = factory.CreateClient();
+            var response = await SendAsync(listClient, HttpMethod.Get, url, accessToken);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var (items, nextCursor) = await ReadPageAsync(response);
+            visited.AddRange(items);
+            page++;
+            cursor = nextCursor;
+        } while (cursor is not null && page < 10);
+
+        Assert.Null(cursor);
+        Assert.Equal(3, page);
+        Assert.Equal(5, visited.Count);
+        Assert.True(expected.SetEquals(
+            visited.Select(item => item.GetProperty("checkInId").GetGuid())));
+        for (var index = 1; index < visited.Count; index++)
+        {
+            Assert.True(
+                visited[index - 1].GetProperty("recordedAt").GetDateTimeOffset() >=
+                visited[index].GetProperty("recordedAt").GetDateTimeOffset());
+        }
+    }
+
+    [Fact]
+    public async Task List_WithoutLimit_ShouldApplyDefaultLimitOfTwenty()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        for (var index = 0; index < 21; index++)
+        {
+            await CreateCheckInAsync(factory, accessToken, dimensionId);
+        }
+
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(listClient, HttpMethod.Get, "/check-ins", accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var (items, nextCursor) = await ReadPageAsync(response);
+        Assert.Equal(20, items.Count);
+        Assert.False(string.IsNullOrEmpty(nextCursor));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public async Task List_WithOutOfRangeLimit_ShouldReturn400(int limit)
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(listClient, HttpMethod.Get, $"/check-ins?limit={limit}", accessToken);
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest, "limit");
+    }
+
+    [Fact]
+    public async Task List_WithNonIntegerLimit_ShouldReturn400Problem()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(listClient, HttpMethod.Get, "/check-ins?limit=abc", accessToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Theory]
+    [InlineData("garbage")]
+    [InlineData("no-es-base64!")]
+    [InlineData("YWJjZA==")]
+    public async Task List_WithMalformedCursor_ShouldReturn400Uniform(string cursor)
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(
+            listClient, HttpMethod.Get, $"/check-ins?cursor={cursor}", accessToken);
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest,
+            "El cursor proporcionado no es válido.");
+    }
+
+    [Theory]
+    [InlineData("2|2026-10-09T15:04:05.1234567+00:00|550e8400-e29b-41d4-a716-446655440000")]
+    [InlineData("1|2026-10-09T15:04:05.1234567+00:00")]
+    [InlineData("1|not-a-timestamp|550e8400-e29b-41d4-a716-446655440000")]
+    public async Task List_WithWellFormedButInvalidCursorPayload_ShouldReturn400Uniform(string plaintext)
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var cursor = ToBase64Url(plaintext);
+
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(
+            listClient, HttpMethod.Get, $"/check-ins?cursor={cursor}", accessToken);
+
+        await AssertProblemAsync(response, HttpStatusCode.BadRequest,
+            "El cursor proporcionado no es válido.");
+    }
+
+    [Fact]
+    public async Task List_WithoutOrWithGarbageToken_ShouldReturn401()
+    {
+        using var factory = CreateFactory();
+        using var anonymousClient = factory.CreateClient();
+        using var garbageClient = factory.CreateClient();
+
+        var anonymousResponse = await SendAsync(anonymousClient, HttpMethod.Get, "/check-ins", null);
+        var garbageResponse = await SendAsync(
+            garbageClient, HttpMethod.Get, "/check-ins", "garbage-token");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, garbageResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task List_WithRevokedToken_ShouldReturn401_Regression()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        await RevokeAccessTokenAsync(client, accessToken);
+
+        using var client2 = factory.CreateClient();
+        var response = await SendAsync(client2, HttpMethod.Get, "/check-ins", accessToken);
+        await AssertProblemAsync(response, HttpStatusCode.Unauthorized,
+            "no es válido, ha expirado o ha sido revocado");
+    }
+
+    [Fact]
+    public async Task List_WithAdministratorToken_ShouldReturnOnlyOwnCheckIns_RN026()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, adminToken) = await CreateSessionAsync(client);
+        var (_, userToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var adminCheckInId = await CreateCheckInAsync(factory, adminToken, dimensionId);
+        var foreignCheckInId = await CreateCheckInAsync(factory, userToken, dimensionId);
+        await EnableAdministratorAsync(adminUserId);
+
+        using var listClient = factory.CreateClient();
+        var response = await SendAsync(listClient, HttpMethod.Get, "/check-ins", adminToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var (items, _) = await ReadPageAsync(response);
+        var returned = items.Select(item => item.GetProperty("checkInId").GetGuid()).ToArray();
+        Assert.Contains(adminCheckInId, returned);
+        Assert.DoesNotContain(foreignCheckInId, returned);
+    }
+
+    [Fact]
+    public async Task List_ShouldNeverReturnForeignCheckInsAcrossPages()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, ownerToken) = await CreateSessionAsync(client);
+        var (_, foreignToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var baseTime = DateTimeOffset.UtcNow.AddHours(-4);
+        var expected = new HashSet<Guid>();
+        for (var index = 0; index < 3; index++)
+        {
+            expected.Add(await CreateCheckInAsync(factory, ownerToken, dimensionId,
+                recordedAt: baseTime.AddMinutes(index * 30)));
+            await CreateCheckInAsync(factory, foreignToken, dimensionId,
+                recordedAt: baseTime.AddMinutes(index * 30 + 10));
+        }
+
+        var visited = new List<Guid>();
+        string? cursor = null;
+        var page = 0;
+        do
+        {
+            var url = $"/check-ins?limit=1{(cursor is null ? string.Empty : $"&cursor={cursor}")}";
+            using var listClient = factory.CreateClient();
+            var response = await SendAsync(listClient, HttpMethod.Get, url, ownerToken);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var (items, nextCursor) = await ReadPageAsync(response);
+            visited.AddRange(items.Select(item => item.GetProperty("checkInId").GetGuid()));
+            cursor = nextCursor;
+            page++;
+        } while (cursor is not null && page < 10);
+
+        Assert.True(expected.SetEquals(visited));
+    }
+
+    [Fact]
+    public async Task List_AfterConcurrentInsertion_ShouldNotShiftSubsequentPages()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var baseTime = DateTimeOffset.UtcNow.AddHours(-3);
+        var oldest = await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime);
+        var middle = await CreateCheckInAsync(
+            factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(30));
+        var newest = await CreateCheckInAsync(
+            factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(60));
+
+        using var firstClient = factory.CreateClient();
+        var first = await SendAsync(firstClient, HttpMethod.Get, "/check-ins?limit=1", accessToken);
+        var (firstItems, firstCursor) = await ReadPageAsync(first);
+        Assert.Equal(newest, Assert.Single(firstItems).GetProperty("checkInId").GetGuid());
+        Assert.False(string.IsNullOrEmpty(firstCursor));
+
+        var inserted = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        using var secondClient = factory.CreateClient();
+        var second = await SendAsync(
+            secondClient, HttpMethod.Get, $"/check-ins?limit=1&cursor={firstCursor}", accessToken);
+        var (secondItems, secondCursor) = await ReadPageAsync(second);
+        Assert.Equal(middle, Assert.Single(secondItems).GetProperty("checkInId").GetGuid());
+
+        using var thirdClient = factory.CreateClient();
+        var third = await SendAsync(
+            thirdClient, HttpMethod.Get, $"/check-ins?limit=1&cursor={secondCursor}", accessToken);
+        var (thirdItems, thirdCursor) = await ReadPageAsync(third);
+        Assert.Equal(oldest, Assert.Single(thirdItems).GetProperty("checkInId").GetGuid());
+        Assert.Null(thirdCursor);
+
+        var visited = new List<Guid>
+        {
+            firstItems[0].GetProperty("checkInId").GetGuid(),
+            secondItems[0].GetProperty("checkInId").GetGuid(),
+            thirdItems[0].GetProperty("checkInId").GetGuid()
+        };
+        Assert.DoesNotContain(inserted, visited);
+    }
+
+    [Fact]
+    public async Task List_AfterDeleteAcrossCursor_ShouldSkipDeletedRowWithoutError()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var baseTime = DateTimeOffset.UtcNow.AddHours(-3);
+        var oldest = await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime);
+        var middle = await CreateCheckInAsync(
+            factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(30));
+        var newest = await CreateCheckInAsync(
+            factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(60));
+
+        using var firstClient = factory.CreateClient();
+        var first = await SendAsync(firstClient, HttpMethod.Get, "/check-ins?limit=1", accessToken);
+        var (firstItems, firstCursor) = await ReadPageAsync(first);
+        Assert.Equal(newest, Assert.Single(firstItems).GetProperty("checkInId").GetGuid());
+
+        using var deleteClient = factory.CreateClient();
+        var deleted = await SendAsync(deleteClient, HttpMethod.Delete,
+            $"/check-ins/{newest}", accessToken, new { revision = 1 });
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+
+        using var secondClient = factory.CreateClient();
+        var second = await SendAsync(
+            secondClient, HttpMethod.Get, $"/check-ins?limit=1&cursor={firstCursor}", accessToken);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var (secondItems, secondCursor) = await ReadPageAsync(second);
+        Assert.Equal(middle, Assert.Single(secondItems).GetProperty("checkInId").GetGuid());
+
+        using var thirdClient = factory.CreateClient();
+        var third = await SendAsync(
+            thirdClient, HttpMethod.Get, $"/check-ins?limit=1&cursor={secondCursor}", accessToken);
+        var (thirdItems, thirdCursor) = await ReadPageAsync(third);
+        Assert.Equal(oldest, Assert.Single(thirdItems).GetProperty("checkInId").GetGuid());
+        Assert.Null(thirdCursor);
+    }
+
+    [Fact]
+    public async Task List_AfterPutMovingRecordedAtAcrossCursor_ShouldOmitUnvisitedRow_DocumentedKeysetLimitation()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var baseTime = DateTimeOffset.UtcNow.AddHours(-5);
+        var oldest = await CreateCheckInAsync(factory, accessToken, dimensionId, recordedAt: baseTime);
+        var moved = await CreateCheckInAsync(
+            factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(30));
+        var anchor = await CreateCheckInAsync(
+            factory, accessToken, dimensionId, recordedAt: baseTime.AddMinutes(60));
+
+        using var firstClient = factory.CreateClient();
+        var first = await SendAsync(firstClient, HttpMethod.Get, "/check-ins?limit=1", accessToken);
+        var (firstItems, firstCursor) = await ReadPageAsync(first);
+        Assert.Equal(anchor, Assert.Single(firstItems).GetProperty("checkInId").GetGuid());
+
+        using var movedRepresentation = await GetRepresentationAsync(factory, moved, accessToken);
+        var movedCreatedAt = movedRepresentation.RootElement.GetProperty("createdAt").GetDateTimeOffset();
+        using var putClient = factory.CreateClient();
+        var put = await SendAsync(putClient, HttpMethod.Put, $"/check-ins/{moved}", accessToken, new
+        {
+            revision = 1,
+            recordedAt = movedCreatedAt,
+            note = "Reubicado",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        using var secondClient = factory.CreateClient();
+        var second = await SendAsync(
+            secondClient, HttpMethod.Get, $"/check-ins?limit=10&cursor={firstCursor}", accessToken);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var (secondItems, secondCursor) = await ReadPageAsync(second);
+        Assert.Null(secondCursor);
+        Assert.Equal(new[] { oldest },
+            secondItems.Select(item => item.GetProperty("checkInId").GetGuid()).ToArray());
+    }
+
+    // ------------------------------------------------------------------------------------------
     // Composición
     // ------------------------------------------------------------------------------------------
 
@@ -1364,11 +1752,13 @@ public sealed class CheckInHttpTests : IAsyncLifetime
         string accessToken,
         Guid dimensionId,
         int value = 3,
-        string? note = "Original")
+        string? note = "Original",
+        DateTimeOffset? recordedAt = null)
     {
         using var client = factory.CreateClient();
         var response = await SendAsync(client, HttpMethod.Post, "/check-ins", accessToken, new
         {
+            recordedAt,
             note,
             measurements = new[] { new { dimensionId, value } }
         });
@@ -1421,6 +1811,27 @@ public sealed class CheckInHttpTests : IAsyncLifetime
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return body.RootElement.GetProperty(property).GetGuid();
     }
+
+    private static async Task<(IReadOnlyList<JsonElement> Items, string? NextCursor)> ReadPageAsync(
+        HttpResponseMessage response)
+    {
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = body.RootElement.GetProperty("items")
+            .EnumerateArray()
+            .Select(item => item.Clone())
+            .ToArray();
+        var nextCursorElement = body.RootElement.GetProperty("nextCursor");
+        var nextCursor = nextCursorElement.ValueKind == JsonValueKind.Null
+            ? null
+            : nextCursorElement.GetString();
+        return (items, nextCursor);
+    }
+
+    private static string ToBase64Url(string plaintext) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(plaintext))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
 
     private Task<HttpResponseMessage> SendAsync(
         HttpClient client, HttpMethod method, string path, string? accessToken, object? body = null)

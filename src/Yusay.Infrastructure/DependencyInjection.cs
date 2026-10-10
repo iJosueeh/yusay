@@ -22,9 +22,8 @@ public static class DependencyInjection
         var connectionString = ResolvePostgresConnectionString(configuration);
 
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-        
-        var dataSource = dataSourceBuilder.Build();
-        services.AddSingleton(dataSource);
+
+        services.AddSingleton(_ => dataSourceBuilder.Build());
 
         services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
 

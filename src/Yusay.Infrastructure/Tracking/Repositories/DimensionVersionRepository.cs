@@ -40,8 +40,6 @@ public sealed class DimensionVersionRepository(IDbConnectionFactory connectionFa
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        // Sin filtro de estado: la edición se valida contra la versión almacenada aunque
-        // esté RETIRED (OQ-DOM-008); V015 mantiene min/max/step congelados.
         const string sql = """
             SELECT
                 dimension_version_id,

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Data.Common;
 using Dapper;
 using Yusay.Application.Common.Interfaces;
@@ -8,6 +9,8 @@ namespace Yusay.Infrastructure.Tracking.Repositories;
 
 public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : ICheckInRepository
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
 
     public async Task<DateTimeOffset> GetDatabaseTimestampAsync(
@@ -164,11 +167,6 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        // Sentencia condicional atómica de MP-PHYS-007: revisión esperada y ventana
-        // absoluta de 168 horas (límite superior estricto) evaluadas en la base de datos.
-        // El CTE MATERIALIZED evalúa clock_timestamp() una única vez por operación y ese
-        // mismo instante alimenta tanto la guarda de la ventana como updated_at: la edición
-        // confirmada nunca queda fechada fuera de la ventana que autorizó la operación.
         const string sql = """
             WITH instant AS MATERIALIZED (
                 SELECT clock_timestamp() AS now_instant
@@ -202,7 +200,6 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        // Solo cambia value: dimension_version_id es inmutable (RN-020/OQ-DOM-008).
         const string sql = """
             UPDATE yusay.measurement
             SET value = @Value
@@ -253,6 +250,92 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         }, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<CheckIn>> ListOwnedPageAsync(
+        Guid ownerId,
+        int fetchLimit,
+        DateTimeOffset? cursorRecordedAt,
+        Guid? cursorCheckInId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            WITH page AS (
+                SELECT
+                    check_in_id,
+                    recorded_at,
+                    created_at,
+                    updated_at,
+                    revision,
+                    note
+                FROM yusay.check_in
+                WHERE user_id = @OwnerId
+                  AND (@HasCursor = false OR (recorded_at, check_in_id) < (@CursorRecordedAt, @CursorCheckInId))
+                ORDER BY recorded_at DESC, check_in_id DESC
+                LIMIT @FetchLimit
+            )
+            SELECT
+                p.check_in_id,
+                p.recorded_at,
+                p.created_at,
+                p.updated_at,
+                p.revision,
+                p.note,
+                COALESCE((
+                    SELECT json_agg(json_build_object(
+                        'dimensionId', m.dimension_id,
+                        'dimensionVersionId', m.dimension_version_id,
+                        'value', m.value)
+                    ORDER BY m.dimension_id)
+                    FROM yusay.measurement m
+                    WHERE m.check_in_id = p.check_in_id
+                ), '[]'::json) AS measurements
+            FROM page p
+            ORDER BY p.recorded_at DESC, p.check_in_id DESC;
+            """;
+
+        return await ExecuteWithConnectionAsync(null, async conn =>
+        {
+            var rows = await conn.QueryAsync<CheckInListRow>(new CommandDefinition(
+                sql,
+                new
+                {
+                    OwnerId = ownerId,
+                    FetchLimit = fetchLimit,
+                    HasCursor = cursorRecordedAt is not null && cursorCheckInId is not null,
+                    CursorRecordedAt = cursorRecordedAt,
+                    CursorCheckInId = cursorCheckInId
+                },
+                cancellationToken: cancellationToken));
+
+            return rows
+                .Select(row =>
+                {
+                    var storedMeasurements =
+                        JsonSerializer.Deserialize<ListMeasurementRow[]>(row.Measurements, JsonOptions) ?? [];
+                    if (storedMeasurements.Length == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Violación de integridad RN-030: el CheckIn {row.Check_in_id} no contiene Measurements.");
+                    }
+
+                    return CheckIn.Rehydrate(
+                        row.Check_in_id,
+                        ownerId,
+                        row.Recorded_at,
+                        row.Created_at,
+                        row.Updated_at,
+                        row.Revision,
+                        row.Note,
+                        storedMeasurements
+                            .Select(measurement => Measurement.Rehydrate(
+                                measurement.DimensionId,
+                                measurement.DimensionVersionId,
+                                measurement.Value))
+                            .ToArray());
+                })
+                .ToArray();
+        }, cancellationToken);
+    }
+
     private async Task<T> ExecuteWithConnectionAsync<T>(
         DbTransaction? transaction,
         Func<DbConnection, Task<T>> action,
@@ -299,4 +382,17 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         public Guid Dimension_version_id { get; init; }
         public int Value { get; init; }
     }
+
+    private sealed class CheckInListRow
+    {
+        public Guid Check_in_id { get; init; }
+        public DateTimeOffset Recorded_at { get; init; }
+        public DateTimeOffset Created_at { get; init; }
+        public DateTimeOffset? Updated_at { get; init; }
+        public int Revision { get; init; }
+        public string? Note { get; init; }
+        public string Measurements { get; init; } = string.Empty;
+    }
+
+    private sealed record ListMeasurementRow(Guid DimensionId, Guid DimensionVersionId, int Value);
 }
