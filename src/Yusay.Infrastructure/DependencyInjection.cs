@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditEventRepository, Audit.Repositories.AuditEventRepository>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();
         services.AddScoped<IUserCredentialRepository, UserCredentialRepository>();
+        services.AddScoped<IAdministratorAuthorizationRepository, AdministratorAuthorizationRepository>();
         services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<ICheckInRepository, CheckInRepository>();

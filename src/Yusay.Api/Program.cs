@@ -1,6 +1,9 @@
 using Dapper;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Yusay.Api.Authentication;
+using Yusay.Api.Authorization;
 using Yusay.Api.Common;
 using Yusay.Application;
 using Yusay.Application.Common.Interfaces;
@@ -27,6 +30,23 @@ builder.Services.AddAuthentication(BearerAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, BearerAuthenticationHandler>(
         BearerAuthenticationHandler.SchemeName,
         options => { });
+
+// Autorización administrativa (OQ-ARCH-017): política Administrator con requirement y
+// handler que consultan yusay.administrator por cada evaluación, sin claims de rol en el
+// JWT, sin caché y sin FallbackPolicy. La denegación para identidades autenticadas se
+// centraliza en ProblemDetails con traceId; los 401/503 conservan su contrato actual.
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(
+        AdministratorPolicy.Name,
+        policy =>
+        {
+            policy.RequireAuthenticatedUser();
+            policy.AddRequirements(new AdministratorRequirement());
+        });
+});
+builder.Services.AddScoped<IAuthorizationHandler, AdministratorAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuthorizationProblemResultHandler>();
 
 // Identidad corriente (F1 de N1, OQ-ARCH-017): el adaptador lee el principal ya validado por
 // el handler —sin segunda validación JWT ni consulta a Redis— y se registra con ciclo de vida
