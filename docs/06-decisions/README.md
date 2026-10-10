@@ -24,7 +24,7 @@ Decisiones resueltas por ADR-001 y ADR-002:
 - **Authentication strategy:** JWT + Argon2id consolidado en backend ([ADR-002](ADR-002-technology-stack.md); [OQ-ARCH-010](#oq-arch-010)). OAuth externo permanece como capacidad COULD abierta (OQ-PROD-018).
 
 Decisiones que mantienen **Status: OPEN**:
-- **Authorization & permissions:** propiedad de datos privados, habilitación ADMINISTRATOR y respuestas 401/403/503 ([OQ-ARCH-017](#oq-arch-017)).
+- **Authorization & permissions:** gobernanza de la habilitación ADMINISTRATOR (bootstrap, rol operativo, trazabilidad y retención) ([OQ-ARCH-018](#oq-arch-018)). El mecanismo de autorización y las denegaciones 401/403/503 quedaron resueltos en [OQ-ARCH-017](#oq-arch-017).
 - **Hosting/deployment:** definir entorno de producción y proveedor cloud según restricciones operativas.
 - **Caching strategy:** justificar solo si responde a necesidades concretas de rendimiento (salvo denylist de revocación selectiva de sesión en backend).
 - **Search strategy:** definir necesidades de búsqueda antes de decidir mecanismos o infraestructura.
@@ -111,6 +111,15 @@ Decisiones que mantienen **Status: OPEN**:
 
 - **ID:** OQ-ARCH-017.
 - **Pregunta:** ¿Qué Authorization strategy aplicará el backend a los recursos de Yusay?
-- **Motivo:** Las reglas sustantivas están aprobadas (propiedad de datos privados, ACTIVE y correo verificado, alcance limitado de la habilitación ADMINISTRATOR), pero faltan por decidir el mecanismo de aplicación server-side y las respuestas de denegación.
-- **Impacto:** RNF-004, RNF-005, RN-025, RN-026 y RF-019 a RF-023; depende de OQ-PROD-002, OQ-PROD-008 y OQ-NFR-004.
-- **Status:** OPEN.
+- **Motivo:** Las reglas sustantivas están aprobadas (propiedad de datos privados, ACTIVE y correo verificado, alcance limitado de la habilitación ADMINISTRATOR); faltaban el mecanismo de aplicación server-side y las respuestas de denegación.
+- **Impacto:** RNF-004, RNF-005, RN-025, RN-026 y RF-019 a RF-023.
+- **Resolución:** El backend aplicará una política `Administrator` evaluada por petición: un requirement de autorización consultará `yusay.administrator` por el `user_id` del principal ya validado, con una consulta a PostgreSQL por cada solicitud administrativa. La habilitación administrativa no se emite en el JWT ni en ningún claim. Se mantienen sin cambios la comprobación de identidad ACTIVE y correo verificado y la ausencia de `FallbackPolicy`. Denegaciones: 401 ante autenticación ausente o inválida; 403 con ProblemDetails y `traceId` ante identidad válida sin habilitación administrativa; 503 fail-closed si la comprobación de autorización no puede ejecutarse. RN-025, RN-026 y RNF-004 permanecen inalteradas: la política no concede acceso a respuestas, resultados ni check-ins ajenos, y la autorización de propiedad continúa resuelta en los casos de uso. Revocación efectiva desde el commit del `DELETE` para toda comprobación administrativa posterior, sin ventana ligada a la vigencia del token; solicitudes administrativas previamente autorizadas pueden completarse. Estado de implementación al cierre: existen los 401/503 en ProblemDetails, la comprobación de identidad por petición y la denylist de tokens; la política, su requirement, el repositorio de habilitación y la vía de 403 de autorización quedan decididos pero no implementados. La gobernanza de la habilitación y revocación de administradores (bootstrap, rol operativo, trazabilidad y retención) queda fuera de esta resolución y se tramita en OQ-ARCH-018, que permanece OPEN. OQ-PROD-002, OQ-PROD-008 y OQ-NFR-004 no se resuelven por esta decisión.
+- **Status:** RESOLVED mediante aprobación explícita del responsable del proyecto.
+
+### OQ-ARCH-018
+
+- **ID:** OQ-ARCH-018.
+- **Pregunta:** ¿Cómo se habilitarán y revocarán los administradores, y cómo se trazará esa operación durante el MVP?
+- **Motivo:** OQ-ARCH-017 define la comprobación de autorización, pero la creación de la habilitación en `yusay.administrator` no está contemplada por ningún RF, carece de acción en el catálogo cerrado de auditoría y el diccionario de identidad no define procedimiento de otorgar/revocar. Se propone procedimiento operativo fuera de banda, sin endpoints, con trazabilidad en un registro operacional independiente de `audit_event`; faltan por aprobar el rol operativo, el soporte del registro y su retención.
+- **Impacto:** RN-027, RNF-006, RNF-007, MP-PHYS-014, RF-021 y la habilitación de los actores de RF-019, RF-020, RF-022 y RF-023.
+- **Status:** OPEN. Cuestiones pendientes: (a) identidad operativa — `yusay_app`, que ya posee el DML necesario sin cambios, frente a un rol dedicado `yusay_admin_ops` (INSERT y DELETE sobre `yusay.administrator`) que exigiría enmendar MP-PHYS-014 y un canal de provisionamiento manual, dado que `yusay_migrator` carece de `CREATEROLE`; (b) retención propuesta de 365 días para el registro operacional externo, sin resolver OQ-NFR-004; (c) soporte del registro con historial inmutable, escritura posterior a la ejecución verificada y acceso restringido a la custodia de los secretos; (d) tratamiento de las referencias del registro al eliminarse la cuenta objetivo. OQ-PROD-002, OQ-PROD-008 y OQ-NFR-004 permanecen OPEN y no se resuelven por implicación.
