@@ -20,12 +20,12 @@ using Yusay.IntegrationTests.Infrastructure;
 namespace Yusay.IntegrationTests.Http;
 
 /// <summary>
-/// Pruebas HTTP de CheckIn (F2a de N1 + F2b-1): creación y lectura propias, edición
-/// optimista con ventana absoluta de 168 horas, 404 uniforme para recurso ajeno e
-/// inexistente (comparando los campos públicos de ProblemDetails salvo traceId),
-/// RN-026 (el administrador no accede a check-ins privados ajenos), validaciones de
-/// escala/ventana/mediciones, carrera de dos ediciones con la misma revisión y
-/// regresión del gate de autenticación.
+/// Pruebas HTTP de CheckIn (F2a de N1 + F2b-1 + F2b-2): creación y lectura propias,
+/// edición optimista con ventana absoluta de 168 horas, eliminación física sin ventana
+/// con revisión en el cuerpo, 404 uniforme para recurso ajeno e inexistente (comparando
+/// los campos públicos de ProblemDetails salvo traceId), RN-026 (el administrador no
+/// accede a check-ins privados ajenos), validaciones de escala/ventana/mediciones,
+/// carreras de concurrencia optimista y regresión del gate de autenticación.
 /// </summary>
 [Collection("DatabaseCollection")]
 public sealed class CheckInHttpTests : IAsyncLifetime
@@ -942,6 +942,352 @@ public sealed class CheckInHttpTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
         Assert.Equal(JsonValueKind.Null, after.RootElement.GetProperty("note").ValueKind);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // DELETE /check-ins/{id} (F2b-2): OQ-DOM-009 / RN-022 / RF-011 — revisión en el cuerpo
+    // ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Delete_WithMatchingRevision_ShouldReturn204WithEmptyBody()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        var response = await SendAsync(client, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken,
+            new { revision = 1 });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.True(response.Content.Headers.ContentLength is null or 0,
+            "El 204 No Content no debe incluir cuerpo.");
+    }
+
+    [Fact]
+    public async Task Get_AfterSuccessfulDelete_ShouldReturn404()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        var deleteResponse = await SendAsync(client, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken,
+            new { revision = 1 });
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        using var getClient = factory.CreateClient();
+        var getResponse = await SendAsync(getClient, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+        await AssertProblemAsync(getResponse, HttpStatusCode.NotFound, "no existe");
+    }
+
+    [Fact]
+    public async Task Delete_Repeatedly_ShouldReturnUniform404()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        var first = await SendAsync(client, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken,
+            new { revision = 1 });
+        Assert.Equal(HttpStatusCode.NoContent, first.StatusCode);
+
+        // El recurso ya eliminado es indistinguible de uno inexistente
+        using var secondClient = factory.CreateClient();
+        var second = await SendAsync(secondClient, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken,
+            new { revision = 1 });
+        await AssertProblemAsync(second, HttpStatusCode.NotFound, "El CheckIn solicitado no existe.");
+    }
+
+    [Fact]
+    public async Task Delete_ForeignAndNonexistent_ShouldReturnUniform404()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, tokenA) = await CreateSessionAsync(client);
+        var (_, tokenB) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var ownedId = await CreateCheckInAsync(factory, tokenA, dimensionId);
+
+        // Ajeno con la revisión correcta e inexistente con la misma revisión: mismo 404
+        using var clientB = factory.CreateClient();
+        var foreignResponse = await SendAsync(clientB, HttpMethod.Delete, $"/check-ins/{ownedId}", tokenB,
+            new { revision = 1 });
+        using var clientA2 = factory.CreateClient();
+        var nonexistentResponse = await SendAsync(clientA2, HttpMethod.Delete,
+            $"/check-ins/{Guid.NewGuid()}", tokenA, new { revision = 1 });
+
+        Assert.Equal(HttpStatusCode.NotFound, foreignResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, nonexistentResponse.StatusCode);
+
+        using var foreign = JsonDocument.Parse(await foreignResponse.Content.ReadAsStringAsync());
+        using var nonexistent = JsonDocument.Parse(await nonexistentResponse.Content.ReadAsStringAsync());
+        foreach (var field in new[] { "title", "detail", "status", "type" })
+        {
+            Assert.True(foreign.RootElement.TryGetProperty(field, out var foreignValue),
+                $"Falta el campo público {field} en el 404 de recurso ajeno.");
+            Assert.True(nonexistent.RootElement.TryGetProperty(field, out var nonexistentValue),
+                $"Falta el campo público {field} en el 404 de recurso inexistente.");
+            Assert.Equal(foreignValue.GetRawText(), nonexistentValue.GetRawText());
+        }
+        Assert.NotEqual(
+            foreign.RootElement.GetProperty("traceId").GetString(),
+            nonexistent.RootElement.GetProperty("traceId").GetString());
+
+        // El recurso ajeno permanece intacto
+        using var getA = factory.CreateClient();
+        var getResponse = await SendAsync(getA, HttpMethod.Get, $"/check-ins/{ownedId}", tokenA);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_ForeignWithStaleRevision_ShouldReturn404Never409()
+    {
+        // La propiedad se verifica antes de diagnosticar la revisión: el recurso ajeno
+        // con revisión desactualizada produce 404, jamás 409.
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, tokenA) = await CreateSessionAsync(client);
+        var (_, tokenB) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var ownedId = await CreateCheckInAsync(factory, tokenA, dimensionId);
+
+        using var clientB = factory.CreateClient();
+        var response = await SendAsync(clientB, HttpMethod.Delete, $"/check-ins/{ownedId}", tokenB,
+            new { revision = 999 });
+
+        await AssertProblemAsync(response, HttpStatusCode.NotFound, "El CheckIn solicitado no existe.");
+
+        using var getA = factory.CreateClient();
+        var getResponse = await SendAsync(getA, HttpMethod.Get, $"/check-ins/{ownedId}", tokenA);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_WithStaleRevision_ShouldReturn409AndPreserveCheckIn()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        // Un PUT legítimo deja la revisión vigente en 2
+        using var before = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = before.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+        using var putClient = factory.CreateClient();
+        var putResponse = await SendAsync(putClient, HttpMethod.Put, $"/check-ins/{checkInId}", accessToken, new
+        {
+            revision = 1,
+            recordedAt,
+            note = "Edición previa",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, putResponse.StatusCode);
+
+        // DELETE con la revisión vieja: 409 solo porque el recurso es propio
+        using var deleteClient = factory.CreateClient();
+        var deleteResponse = await SendAsync(deleteClient, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken,
+            new { revision = 1 });
+        await AssertProblemAsync(deleteResponse, HttpStatusCode.Conflict, "revisión vigente");
+
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(2, after.RootElement.GetProperty("revision").GetInt32());
+        Assert.Equal("Edición previa", after.RootElement.GetProperty("note").GetString());
+    }
+
+    [Fact]
+    public async Task Delete_WhenCheckInOlderThan168Hours_ShouldReturn204()
+    {
+        // OQ-DOM-009: la eliminación no admite ventana temporal, a diferencia del PUT.
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        await ShiftEditWindowAsync(checkInId, hours: 200);
+
+        var response = await SendAsync(client, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken,
+            new { revision = 1 });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var getClient = factory.CreateClient();
+        var getResponse = await SendAsync(getClient, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+        Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_TwoConcurrentRequestsWithSameRevision_ExactlyOneShouldSucceed()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        var payload = new { revision = 1 };
+        var tasks = Enumerable.Range(0, 2)
+            .Select(_ =>
+            {
+                var concurrentClient = factory.CreateClient();
+                return SendAsync(concurrentClient, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken, payload);
+            })
+            .ToArray();
+        var responses = await Task.WhenAll(tasks);
+
+        var statuses = responses.Select(response => response.StatusCode)
+            .OrderBy(status => status)
+            .ToArray();
+        Assert.Equal(new[] { HttpStatusCode.NoContent, HttpStatusCode.NotFound }, statuses);
+
+        using var getAfter = factory.CreateClient();
+        var getResponse = await SendAsync(getAfter, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+        Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_ConcurrentWithPut_ShouldRemainCoherentWithOptimisticRevision()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var before = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = before.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var putPayload = new
+        {
+            revision = 1,
+            recordedAt,
+            note = "Edición concurrente",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        };
+        var deletePayload = new { revision = 1 };
+
+        var putTask = SendAsync(factory.CreateClient(), HttpMethod.Put, $"/check-ins/{checkInId}",
+            accessToken, putPayload);
+        var deleteTask = SendAsync(factory.CreateClient(), HttpMethod.Delete, $"/check-ins/{checkInId}",
+            accessToken, deletePayload);
+        await Task.WhenAll(putTask, deleteTask);
+        var putResponse = await putTask;
+        var deleteResponse = await deleteTask;
+
+        // Solo dos emparejamientos coherentes con la revisión optimista: si el PUT gana
+        // (200), el DELETE queda obsoleto (409) y el recurso sobrevive con revisión 2;
+        // si el DELETE gana (204), el PUT encuentra el recurso eliminado (404).
+        var putWon = putResponse.StatusCode == HttpStatusCode.OK;
+        var coherent =
+            (putWon && deleteResponse.StatusCode == HttpStatusCode.Conflict) ||
+            (!putWon &&
+             putResponse.StatusCode == HttpStatusCode.NotFound &&
+             deleteResponse.StatusCode == HttpStatusCode.NoContent);
+        Assert.True(coherent,
+            $"Combinación incoherente: PUT={putResponse.StatusCode}, DELETE={deleteResponse.StatusCode}.");
+
+        using var getAfter = factory.CreateClient();
+        var getResponse = await SendAsync(getAfter, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+        if (putWon)
+        {
+            Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+            using var after = JsonDocument.Parse(await getResponse.Content.ReadAsStringAsync());
+            Assert.Equal(2, after.RootElement.GetProperty("revision").GetInt32());
+        }
+        else
+        {
+            Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task Delete_WithAdministratorToken_ShouldReturn404ForForeignPrivateCheckIn_RN026()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, userToken) = await CreateSessionAsync(client);
+        var (adminUserId, adminToken) = await CreateSessionAsync(client);
+        await EnableAdministratorAsync(adminUserId);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var ownedId = await CreateCheckInAsync(factory, userToken, dimensionId);
+
+        using var adminClient = factory.CreateClient();
+        var response = await SendAsync(adminClient, HttpMethod.Delete, $"/check-ins/{ownedId}", adminToken,
+            new { revision = 1 });
+
+        // RN-026: Administrator no obtiene automáticamente acceso a check-ins privados
+        await AssertProblemAsync(response, HttpStatusCode.NotFound, "El CheckIn solicitado no existe.");
+
+        using var getUser = factory.CreateClient();
+        var getResponse = await SendAsync(getUser, HttpMethod.Get, $"/check-ins/{ownedId}", userToken);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_WithoutOrWithGarbageToken_ShouldReturn401()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        var payload = new { revision = 1 };
+
+        using var anonymousClient = factory.CreateClient();
+        var anonymousResponse = await SendAsync(anonymousClient, HttpMethod.Delete,
+            $"/check-ins/{checkInId}", null, payload);
+        using var garbageClient = factory.CreateClient();
+        var garbageResponse = await SendAsync(garbageClient, HttpMethod.Delete,
+            $"/check-ins/{checkInId}", "garbage-token", payload);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, garbageResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_WithRevokedToken_ShouldReturn401_Regression()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        await RevokeAccessTokenAsync(client, accessToken);
+
+        using var client2 = factory.CreateClient();
+        var response = await SendAsync(client2, HttpMethod.Delete, $"/check-ins/{checkInId}", accessToken,
+            new { revision = 1 });
+        await AssertProblemAsync(response, HttpStatusCode.Unauthorized,
+            "no es válido, ha expirado o ha sido revocado");
+    }
+
+    [Fact]
+    public async Task Delete_WithoutOrWithNonPositiveRevision_ShouldReturn400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+
+        using var emptyBodyClient = factory.CreateClient();
+        var missingRevision = await SendAsync(emptyBodyClient, HttpMethod.Delete,
+            $"/check-ins/{checkInId}", accessToken, new { });
+        using var zeroRevisionClient = factory.CreateClient();
+        var zeroRevision = await SendAsync(zeroRevisionClient, HttpMethod.Delete,
+            $"/check-ins/{checkInId}", accessToken, new { revision = 0 });
+
+        await AssertProblemAsync(missingRevision, HttpStatusCode.BadRequest, "obligatoria");
+        await AssertProblemAsync(zeroRevision, HttpStatusCode.BadRequest, "obligatoria");
+
+        // El recurso permanece intacto tras las validaciones rechazadas
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(1, after.RootElement.GetProperty("revision").GetInt32());
     }
 
     // ------------------------------------------------------------------------------------------

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Yusay.Api.Contracts.Tracking;
 using Yusay.Application.Tracking.Commands.CreateCheckIn;
+using Yusay.Application.Tracking.Commands.DeleteCheckIn;
 using Yusay.Application.Tracking.Commands.UpdateCheckIn;
 using Yusay.Application.Tracking.Queries.GetCheckInById;
 
@@ -14,11 +15,13 @@ namespace Yusay.Api.Controllers.Tracking;
 public sealed class CheckInController(
     ICreateCheckInUseCase createCheckInUseCase,
     IGetCheckInByIdUseCase getCheckInByIdUseCase,
-    IUpdateCheckInUseCase updateCheckInUseCase) : ControllerBase
+    IUpdateCheckInUseCase updateCheckInUseCase,
+    IDeleteCheckInUseCase deleteCheckInUseCase) : ControllerBase
 {
     private readonly ICreateCheckInUseCase _createCheckInUseCase = createCheckInUseCase;
     private readonly IGetCheckInByIdUseCase _getCheckInByIdUseCase = getCheckInByIdUseCase;
     private readonly IUpdateCheckInUseCase _updateCheckInUseCase = updateCheckInUseCase;
+    private readonly IDeleteCheckInUseCase _deleteCheckInUseCase = deleteCheckInUseCase;
 
     [HttpPost]
     [EndpointName("CreateCheckIn")]
@@ -108,5 +111,25 @@ public sealed class CheckInController(
                     measurement.DimensionVersionId,
                     measurement.Value))
                 .ToArray()));
+    }
+
+    [HttpDelete("{checkInId:guid}")]
+    [EndpointName("DeleteCheckIn")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult> Delete(
+        Guid checkInId,
+        DeleteCheckInRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _deleteCheckInUseCase.ExecuteAsync(
+            new DeleteCheckInCommand(checkInId, request.Revision),
+            cancellationToken);
+
+        return NoContent();
     }
 }

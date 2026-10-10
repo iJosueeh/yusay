@@ -225,6 +225,34 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         }, cancellationToken);
     }
 
+    public async Task<bool> TryDeleteOwnedAsync(
+        Guid checkInId,
+        Guid ownerId,
+        int expectedRevision,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        // OQ-DOM-009: eliminación permitida en cualquier momento (sin predicado temporal)
+        // con revisión optimista. El único DELETE de la operación dispara las cascadas FK
+        // de measurement y check_in_context_tag dentro de esta misma transacción.
+        const string sql = """
+            DELETE FROM yusay.check_in
+            WHERE check_in_id = @CheckInId
+              AND user_id = @OwnerId
+              AND revision = @ExpectedRevision;
+            """;
+
+        return await ExecuteWithConnectionAsync(transaction, async conn =>
+        {
+            var affected = await conn.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { CheckInId = checkInId, OwnerId = ownerId, ExpectedRevision = expectedRevision },
+                transaction,
+                cancellationToken: cancellationToken));
+            return affected == 1;
+        }, cancellationToken);
+    }
+
     private async Task<T> ExecuteWithConnectionAsync<T>(
         DbTransaction? transaction,
         Func<DbConnection, Task<T>> action,

@@ -107,6 +107,33 @@ public sealed class FakeCheckInRepository : ICheckInRepository
             row.UpdatedAt, row.Revision, row.Note, next);
         return Task.FromResult(affected);
     }
+
+    /// <summary>Simula fallo físico de escritura dentro de la transacción de eliminación.</summary>
+    public Exception? DeleteFailure { get; set; }
+
+    public Task<bool> TryDeleteOwnedAsync(
+        Guid checkInId,
+        Guid ownerId,
+        int expectedRevision,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (DeleteFailure is not null)
+        {
+            throw DeleteFailure;
+        }
+
+        // Réplica del predicado SQL de OQ-DOM-009: propiedad + revisión esperada y sin
+        // ninguna condición temporal (la eliminación está permitida en cualquier momento).
+        var index = CheckIns.FindIndex(c => c.CheckInId == checkInId && c.UserId == ownerId);
+        if (index < 0 || CheckIns[index].Revision != expectedRevision)
+        {
+            return Task.FromResult(false);
+        }
+
+        CheckIns.RemoveAt(index);
+        return Task.FromResult(true);
+    }
 }
 
 public sealed class FakeDimensionVersionRepository : IDimensionVersionRepository

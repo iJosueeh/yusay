@@ -241,7 +241,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         using var parsed = JsonDocument.Parse(document);
         var paths = parsed.RootElement.GetProperty("paths");
 
-        // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + CheckIn F2a/F2b-1)
+        // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + CheckIn F2a/F2b-1/F2b-2)
         var routeNames = paths.EnumerateObject()
             .Select(path => path.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
@@ -264,6 +264,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("CreateCheckIn", ReadOperationId(paths, "/check-ins", "post"));
         Assert.Equal("GetCheckInById", ReadOperationId(paths, "/check-ins/{checkInId}", "get"));
         Assert.Equal("UpdateCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "put"));
+        Assert.Equal("DeleteCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "delete"));
         Assert.Equal("HealthCheck", ReadOperationId(paths, "/health", "get"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
@@ -273,6 +274,26 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
             .Select(response => response.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
         Assert.Equal(new[] { "200", "400", "401", "404", "409", "503" }, updateResponses);
+
+        // DELETE documenta 204 sin cuerpo y ProblemDetails 400/401/404/409/503
+        // (OQ-DOM-009: eliminación sin ventana, 404 uniforme y 409 optimista)
+        var deleteOperation = paths.GetProperty("/check-ins/{checkInId}").GetProperty("delete");
+        var deleteResponses = deleteOperation.GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "204", "400", "401", "404", "409", "503" }, deleteResponses);
+
+        // La revisión esperada viaja en el cuerpo del DELETE (contrato de F2b-2)
+        Assert.True(deleteOperation.TryGetProperty("requestBody", out var deleteBody),
+            "El DELETE debe documentar el requestBody que transporta revision.");
+        var deleteSchema = deleteBody.GetProperty("content").GetProperty("application/json").GetProperty("schema");
+        if (deleteSchema.TryGetProperty("$ref", out var deleteSchemaRef))
+        {
+            var schemaName = deleteSchemaRef.GetString()!.Split('/').Last();
+            deleteSchema = parsed.RootElement.GetProperty("components").GetProperty("schemas").GetProperty(schemaName);
+        }
+        Assert.True(deleteSchema.GetProperty("properties").TryGetProperty("revision", out _),
+            "El requestBody del DELETE debe exponer la propiedad revision.");
 
         // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
         // ProblemDetails 400/401/503 — nunca el 200 fantasma que genera MVC sin metadatos

@@ -21,4 +21,17 @@ public interface ICheckInRepository
         IReadOnlyList<Measurement> measurements,
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// DELETE condicional atómico (OQ-DOM-009): filtra por check_in_id, propietario y
+    /// revisión esperada en una única sentencia, sin ventana temporal. La cascada FK
+    /// existente suprime Measurements y relaciones dependientes en la misma transacción.
+    /// Devuelve false si ninguna fila condicionó (ajeno, inexistente o revisión vieja).
+    /// </summary>
+    Task<bool> TryDeleteOwnedAsync(
+        Guid checkInId,
+        Guid ownerId,
+        int expectedRevision,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
 }
