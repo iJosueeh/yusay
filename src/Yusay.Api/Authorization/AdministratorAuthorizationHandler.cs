@@ -5,13 +5,6 @@ using Yusay.Application.Common.Interfaces;
 
 namespace Yusay.Api.Authorization;
 
-/// <summary>
-/// Evaluación del requisito administrativo (OQ-ARCH-017): consulta PostgreSQL por cada
-/// evaluación usando la identidad ya validada, sin segunda validación JWT y sin caché.
-/// Si la comprobación no puede ejecutarse se aplica fail-closed: la excepción se propaga
-/// como <see cref="ServiceUnavailableException"/> y la API responde 503 ProblemDetails sin
-/// conceder acceso.
-/// </summary>
 public sealed class AdministratorAuthorizationHandler(
     IAdministratorAuthorizationRepository administratorAuthorizationRepository)
     : AuthorizationHandler<AdministratorRequirement>
@@ -26,8 +19,6 @@ public sealed class AdministratorAuthorizationHandler(
         var userIdClaim = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdClaim, out var userId) || userId == Guid.Empty)
         {
-            // Sin identidad válida el requisito no se concede; la denegación se traduce en
-            // 401 (sin autenticar) o 403 (autenticado) según el resultado de autorización.
             return;
         }
 

@@ -5,14 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Yusay.Api.Authorization;
 
-/// <summary>
-/// Contrato 403 de la API (OQ-ARCH-017): centraliza la denegación de autorización para
-/// identidades autenticadas como ProblemDetails con traceId (application/problem+json),
-/// conforme al invariante 5 de authentication-invariants.md. Los desafíos sin autenticación
-/// válida se delegan en ChallengeAsync del esquema, conservando intactos los contratos
-/// actuales de 401 y 503; no se audita AUTHORIZATION_DENIED en este bloque (decisión
-/// independiente pendiente).
-/// </summary>
 public sealed class AuthorizationProblemResultHandler(
     IProblemDetailsService problemDetailsService) : IAuthorizationMiddlewareResultHandler
 {
@@ -34,8 +26,6 @@ public sealed class AuthorizationProblemResultHandler(
 
         if (context.User.Identity?.IsAuthenticated != true)
         {
-            // Camino por defecto del esquema Bearer: mismo desafío 401 que antes de existir
-            // este manejador; el handler de autenticación manda su propio contrato.
             await context.ChallengeAsync();
             return;
         }

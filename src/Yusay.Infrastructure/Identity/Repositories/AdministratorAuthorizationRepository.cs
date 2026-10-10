@@ -3,11 +3,6 @@ using Yusay.Application.Common.Interfaces;
 
 namespace Yusay.Infrastructure.Identity.Repositories;
 
-/// <summary>
-/// Comprobación de habilitación administrativa consultando yusay.administrator por la
-/// identidad ya validada (OQ-ARCH-017). Una única consulta por evaluación; el fallo de
-/// conexión se propaga como excepción para que la capa de autorización aplique fail-closed.
-/// </summary>
 public sealed class AdministratorAuthorizationRepository(IDbConnectionFactory connectionFactory)
     : IAdministratorAuthorizationRepository
 {
