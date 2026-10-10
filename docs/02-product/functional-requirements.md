@@ -282,6 +282,15 @@ Baseline documental derivado del [alcance](scope.md) y la [definición del produ
 - **Impacto:** RF-027 y [Authentication strategy](../06-decisions/README.md#pending-architectural-decisions).
 - **Status:** OPEN.
 
+### OQ-PROD-019
+
+- **ID:** OQ-PROD-019.
+- **Pregunta:** ¿Qué alcance tiene consultar la colección de CheckIn propios?
+- **Motivo:** Concretar la capacidad de consultar de RF-010 como colección paginada sin invadir el read model de Timeline (RF-013), Trend (RF-016) ni el vocabulario de filtros de OQ-PROD-011.
+- **Impacto:** RF-010, RF-013, RF-016 y OQ-PROD-011.
+- **Status:** RESOLVED.
+- **Resolución:** La consulta se materializa como `GET /check-ins` bajo RF-010, con paginación keyset sobre la colección exclusivamente propia, orden fijo `recorded_at DESC, check_in_id DESC`, `limit` predeterminado 20 y máximo 100 —un `limit` fuera de rango devuelve 400— y sin filtros ni orden configurables. El cursor es un valor opaco Base64URL sin relleno, versionado y con validación estricta de formato y versión; un cursor malformado o de versión desconocida devuelve 400. El cursor no se firma: la propiedad se comprueba siempre desde la identidad del servidor, nunca desde el cursor, y el contrato no transporta identificadores de usuario. Cada elemento reutiliza la representación de la consulta por identificador, incluidos `revision` y Measurements; conforme a RN-030, una agregación de Measurements vacía no es una representación válida y se trata como violación de integridad, nunca como resultado legítimo. La colección vacía devuelve 200 sin elementos. La página se obtiene mediante una sentencia única que pagina los CheckIns y agrega sus Measurements sobre el mismo snapshot de comando; la navegación no ofrece snapshot entre solicitudes consecutivas y, como `recorded_at` es editable mediante PUT, una navegación concurrente puede omitir o repetir múltiples registros entre páginas. El cursor ancla la navegación en la última clave devuelta y el índice existente favorece la consulta, sin garantizarse un coste independiente de la profundidad. No se genera `audit_event` y no se requiere migración. No sustituye ni amplía RF-013, RF-016 ni OQ-PROD-011.
+
 ### Preguntas relacionadas
 
 - [OQ-PROD-002](../01-discovery/target-users.md#oq-prod-002): ¿Qué información podrá consultar un Visitor?
