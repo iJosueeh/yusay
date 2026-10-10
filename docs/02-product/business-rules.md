@@ -38,7 +38,7 @@ Baseline de reglas del modelo conceptual v0.1, sin definir tablas ni clases. Las
 ## CheckIn
 
 - **RN-019:** Un CheckIn pertenece exactamente a un User y no es un AssessmentAttempt.
-- **RN-020:** Cada Measurement conserva la DimensionVersion exacta utilizada y respeta su definición de medición. Dimension es la identidad estable; escalas, unidades y rangos concretos permanecen abiertos.
+- **RN-020:** Cada Measurement conserva la DimensionVersion exacta utilizada y respeta su definición de medición. Dimension es la identidad estable; las escalas, unidades y rangos concretos de las dimensiones iniciales quedan fijados en [OQ-PROD-006](product-definition.md#oq-prod-006) y cualquier cambio exige una nueva DimensionVersion (RN-031).
 - **RN-021:** Yusay administra las Dimensions y permite configurarlas sin modificar código. El User no crea dimensiones arbitrarias durante el MVP.
 - **RN-022:** Modificar y eliminar un CheckIn requiere respetar reglas explícitas. La edición está permitida solo al propietario autenticado, dentro de la ventana absoluta de 168 horas desde `created_at` con límite superior estricto y bajo concurrencia optimista mediante `revision`, según OQ-DOM-008. La eliminación está permitida solo al propietario autenticado, exige `revision` esperada, puede realizarse en cualquier momento y suprime físicamente el CheckIn y sus Measurements por cascada, según OQ-DOM-009. Los registros eliminados se excluyen de Timeline y Trend, y ninguna de las dos operaciones genera `audit_event`.
 

@@ -28,7 +28,7 @@ No se presupone un campo `score` en AnswerOption. La definición conceptual de S
 
 Dimension representa la identidad conceptual estable de aquello que se mide, por ejemplo Stress, Mood, Energy o Sleep. DimensionVersion contiene la definición concreta de medición: escala, rango permitido, step cuando corresponda, labels/anchors y semántica necesaria para interpretar el valor.
 
-Cada Measurement conserva referencia conceptual a la **DimensionVersion exacta** utilizada al registrar el CheckIn; no basta referenciar la Dimension genérica. Los valores concretos de escalas y unidades siguen abiertos.
+Cada Measurement conserva referencia conceptual a la **DimensionVersion exacta** utilizada al registrar el CheckIn; no basta referenciar la Dimension genérica. Los valores concretos de escalas y unidades, abiertos cuando se aceptó esta decisión, quedan fijados para las dimensiones iniciales en [OQ-PROD-006](../02-product/product-definition.md#oq-prod-006).
 
 Cambios de escala, semántica, interpretación o significado histórico requieren una nueva DimensionVersion. Una definición histórica utilizada no puede modificarse de forma que cambie retroactivamente el significado de Measurements existentes. Una versión anterior puede retirarse para nuevas Measurements sin invalidar el histórico.
 
