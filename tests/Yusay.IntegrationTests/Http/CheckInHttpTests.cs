@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -15,6 +16,7 @@ using Yusay.Infrastructure.Emailing;
 using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
+using Yusay.Infrastructure.Tracking.Repositories;
 using Yusay.IntegrationTests.Infrastructure;
 
 namespace Yusay.IntegrationTests.Http;
@@ -1676,6 +1678,283 @@ public sealed class CheckInHttpTests : IAsyncLifetime
         Assert.Null(secondCursor);
         Assert.Equal(new[] { oldest },
             secondItems.Select(item => item.GetProperty("checkInId").GetGuid()).ToArray());
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Consistencia de lectura CheckIn + Measurements (corrección de la carrera PUT/DELETE)
+    //
+    // GetByIdOwnedAsync recupera cabecera y mediciones en una sola sentencia, de modo que
+    // ambas comparten un único snapshot y una eliminación concurrente ya no puede dejar la
+    // cabecera sin mediciones (GET 200 vacío / PUT clasificado como 400). Las pruebas
+    // siguientes fijan el intercalado con transacciones explícitas y espera acotada sobre
+    // pg_stat_activity: sincronización explícita, sin decoradores de infraestructura.
+    // ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetByIdOwnedAsync_ShouldReadHeaderAndMeasurementsConsistently_WithOwnershipAndOptimisticRevision()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (userId, accessToken) = await CreateSessionAsync(client);
+        var (firstDimensionId, _) = await SeedDimensionAsync();
+        var (secondDimensionId, _) = await SeedDimensionAsync();
+
+        using var createResponse = await SendAsync(client, HttpMethod.Post, "/check-ins", accessToken, new
+        {
+            recordedAt = (DateTimeOffset?)null,
+            note = "Lectura consistente",
+            measurements = new[]
+            {
+                new { dimensionId = firstDimensionId, value = 3 },
+                new { dimensionId = secondDimensionId, value = 4 }
+            }
+        });
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        var checkInId = await ReadGuidAsync(createResponse, "checkInId");
+
+        var repository = new CheckInRepository(_fixture.ConnectionFactory);
+
+        var checkIn = await repository.GetByIdOwnedAsync(checkInId, userId);
+        Assert.NotNull(checkIn);
+        Assert.Equal(checkInId, checkIn.CheckInId);
+        Assert.Equal(userId, checkIn.UserId);
+        Assert.Equal(1, checkIn.Revision);
+        Assert.Equal("Lectura consistente", checkIn.Note);
+        Assert.Equal(2, checkIn.Measurements.Count);
+        var byDimension = checkIn.Measurements.ToDictionary(measurement => measurement.DimensionId);
+        Assert.Equal(3, byDimension[firstDimensionId].Value);
+        Assert.Equal(4, byDimension[secondDimensionId].Value);
+
+        // Orden de las mediciones: el mismo criterio ORDER BY dimension_id de la sentencia.
+        await using (var orderConnection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync())
+        {
+            var expectedOrder = (await orderConnection.QueryAsync<Guid>(new CommandDefinition(
+                "SELECT unnest(@Ids::uuid[]) ORDER BY 1;",
+                new { Ids = new[] { firstDimensionId, secondDimensionId } }))).ToArray();
+            Assert.Equal(expectedOrder,
+                checkIn.Measurements.Select(measurement => measurement.DimensionId).ToArray());
+        }
+
+        // El predicado de ownership viaja en la misma sentencia: recurso ajeno o
+        // inexistente → null (404 en la capa HTTP).
+        Assert.Null(await repository.GetByIdOwnedAsync(checkInId, Guid.NewGuid()));
+        Assert.Null(await repository.GetByIdOwnedAsync(Guid.NewGuid(), userId));
+
+        // Transacción explícita: lectura completa y control optimista sobre la misma base.
+        await using (var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync())
+        await using (var transaction = await connection.BeginTransactionAsync())
+        {
+            var inTransaction = await repository.GetByIdOwnedAsync(checkInId, userId, transaction);
+            Assert.NotNull(inTransaction);
+            Assert.Equal(2, inTransaction.Measurements.Count);
+
+            Assert.True(await repository.TryUpdateOwnedAsync(
+                checkInId, userId, 1, inTransaction.RecordedAt, "Editado", transaction));
+            var afterUpdate = await repository.GetByIdOwnedAsync(checkInId, userId, transaction);
+            Assert.NotNull(afterUpdate);
+            Assert.Equal(2, afterUpdate.Revision);
+            Assert.Equal("Editado", afterUpdate.Note);
+
+            // Revisión obsoleta sobre el estado vigente: el compromiso optimista la rechaza.
+            Assert.False(await repository.TryUpdateOwnedAsync(
+                checkInId, userId, 1, afterUpdate.RecordedAt, "Obsoleto", transaction));
+
+            await transaction.RollbackAsync();
+        }
+
+        // El rollback deja intacta la representación HTTP.
+        using var representation = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(1, representation.RootElement.GetProperty("revision").GetInt32());
+        Assert.Equal(2, representation.RootElement.GetProperty("measurements").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Get_WhileDeleteIsUncommitted_ShouldServeCompleteSnapshotThenNotFound()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (userId, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId, value: 3);
+
+        var repository = new CheckInRepository(_fixture.ConnectionFactory);
+
+        // DELETE con la transacción abierta (sin commit): conserva el lock de fila y, bajo
+        // MVCC, la fila sigue siendo visible para los lectores.
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        Assert.True(await repository.TryDeleteOwnedAsync(checkInId, userId, 1, transaction));
+
+        using (var duringClient = factory.CreateClient())
+        {
+            using var during = await SendAsync(
+                duringClient, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+            Assert.Equal(HttpStatusCode.OK, during.StatusCode);
+            using var body = JsonDocument.Parse(await during.Content.ReadAsStringAsync());
+            Assert.Equal(1, body.RootElement.GetProperty("revision").GetInt32());
+            var measurements = body.RootElement.GetProperty("measurements").EnumerateArray().ToArray();
+            Assert.Single(measurements);
+            Assert.Equal(3, measurements[0].GetProperty("value").GetInt32());
+        }
+
+        await transaction.CommitAsync();
+
+        // Tras el commit, 404 uniforme: nunca sobrevive un 200 con measurements vacío.
+        using (var afterClient = factory.CreateClient())
+        {
+            using var after = await SendAsync(
+                afterClient, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+            await AssertProblemAsync(after, HttpStatusCode.NotFound, "El CheckIn solicitado no existe.");
+        }
+    }
+
+    [Fact]
+    public async Task Put_WhileDeleteIsUncommitted_ShouldReturn404Never400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (userId, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId, value: 3);
+        using var before = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = before.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var putPayload = new
+        {
+            revision = 1,
+            recordedAt,
+            note = "Edición concurrente",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        };
+
+        var repository = new CheckInRepository(_fixture.ConnectionFactory);
+
+        // DELETE sin commit: el PUT lee el snapshot completo y se bloquea en su UPDATE
+        // contra la fila retenida. El intercalado queda congelado de forma explícita.
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        Assert.True(await repository.TryDeleteOwnedAsync(checkInId, userId, 1, transaction));
+
+        var putTask = SendAsync(factory.CreateClient(), HttpMethod.Put, $"/check-ins/{checkInId}",
+            accessToken, putPayload);
+
+        var (observedBlocking, activity) =
+            await WaitForCheckInUpdateWaitersAsync(1, TimeSpan.FromSeconds(10));
+
+        // Liberamos siempre la fila para no dejar el PUT colgado si el bloqueo no aparece.
+        await transaction.CommitAsync();
+
+        Assert.True(observedBlocking,
+            "El PUT debió bloquearse en UPDATE yusay.check_in contra el DELETE sin commit. " +
+            $"Actividad observada:\n{activity}");
+
+        using var putResponse = await putTask.WaitAsync(TimeSpan.FromSeconds(30));
+        await AssertProblemAsync(putResponse, HttpStatusCode.NotFound, "El CheckIn solicitado no existe.");
+
+        // Estado final: el DELETE ganó y la clasificación del PUT es 404 (nunca 400).
+        using var finalClient = factory.CreateClient();
+        using var final = await SendAsync(
+            finalClient, HttpMethod.Get, $"/check-ins/{checkInId}", accessToken);
+        await AssertProblemAsync(final, HttpStatusCode.NotFound, "El CheckIn solicitado no existe.");
+    }
+
+    [Fact]
+    public async Task TwoPutsWithSameRevision_QueuedOnRowLock_ShouldYieldExactlyOne200AndOne409()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (_, accessToken) = await CreateSessionAsync(client);
+        var (dimensionId, _) = await SeedDimensionAsync();
+        var checkInId = await CreateCheckInAsync(factory, accessToken, dimensionId);
+        using var before = await GetRepresentationAsync(factory, checkInId, accessToken);
+        var recordedAt = before.RootElement.GetProperty("recordedAt").GetDateTimeOffset();
+
+        var payload = new
+        {
+            revision = 1,
+            recordedAt,
+            note = "Doble edición",
+            measurements = new[] { new { dimensionId, value = 4 } }
+        };
+
+        // La prueba retiene la fila con FOR UPDATE (solo en la transacción de la prueba):
+        // ambos PUT quedan en cola detrás del mismo lock y el intercalado es determinista.
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await connection.ExecuteAsync(new CommandDefinition(
+            "SELECT check_in_id FROM yusay.check_in WHERE check_in_id = @CheckInId FOR UPDATE;",
+            new { CheckInId = checkInId }, transaction));
+
+        var firstPut = SendAsync(factory.CreateClient(), HttpMethod.Put, $"/check-ins/{checkInId}",
+            accessToken, payload);
+        var secondPut = SendAsync(factory.CreateClient(), HttpMethod.Put, $"/check-ins/{checkInId}",
+            accessToken, payload);
+
+        var (queuedBoth, activity) =
+            await WaitForCheckInUpdateWaitersAsync(2, TimeSpan.FromSeconds(10));
+        await transaction.CommitAsync();
+
+        Assert.True(queuedBoth,
+            "Ambos PUT debieron bloquearse en UPDATE yusay.check_in antes de liberar la fila. " +
+            $"Actividad observada:\n{activity}");
+
+        var responses = await Task.WhenAll(
+            firstPut.WaitAsync(TimeSpan.FromSeconds(30)),
+            secondPut.WaitAsync(TimeSpan.FromSeconds(30)));
+
+        // Exactamente un éxito (200) y un conflicto de revisión (409): nunca 500 ni 400.
+        var statuses = responses.Select(response => response.StatusCode)
+            .OrderBy(status => status)
+            .ToArray();
+        Assert.Equal(new[] { HttpStatusCode.OK, HttpStatusCode.Conflict }, statuses);
+
+        using var after = await GetRepresentationAsync(factory, checkInId, accessToken);
+        Assert.Equal(2, after.RootElement.GetProperty("revision").GetInt32());
+        Assert.Equal(4, after.RootElement.GetProperty("measurements").EnumerateArray()
+            .Single().GetProperty("value").GetInt32());
+    }
+
+    /// <summary>
+    /// Espera explícita y acotada a que N sesiones de aplicación queden bloqueadas en el
+    /// UPDATE de yusay.check_in (wait_event_type 'Lock', que cubre locks de fila y
+    /// transacción). Devuelve false si el plazo termina sin alcanzar el número esperado,
+    /// junto con un volcado de pg_stat_activity para diagnosticar el estado real.
+    /// </summary>
+    private async Task<(bool Found, string Activity)> WaitForCheckInUpdateWaitersAsync(
+        int expectedWaiters, TimeSpan timeout)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        await using var monitor = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var activity = string.Empty;
+        while (stopwatch.Elapsed < timeout)
+        {
+            // TryUpdateOwnedAsync precede el UPDATE con el CTE 'WITH instant ...', por lo
+            // que se busca el UPDATE en cualquier posición del texto de la sentencia.
+            activity = await monitor.ExecuteScalarAsync<string>(new CommandDefinition(
+                """
+                SELECT COALESCE(string_agg(format(
+                    'pid=%s state=%s wait=%s/%s q=%s',
+                    pid, state, wait_event_type, wait_event, left(query, 160)), E'\n' ORDER BY pid),
+                    '(sin sesiones)')
+                FROM pg_stat_activity
+                WHERE pid <> pg_backend_pid();
+                """)) ?? "(sin actividad)";
+            var waiting = await monitor.ExecuteScalarAsync<int>(new CommandDefinition(
+                """
+                SELECT count(*)::int
+                FROM pg_stat_activity
+                WHERE wait_event_type = 'Lock'
+                  AND query ILIKE '%UPDATE yusay.check_in%';
+                """));
+            if (waiting >= expectedWaiters)
+            {
+                return (true, activity);
+            }
+
+            await Task.Delay(100);
+        }
+
+        return (false, activity);
     }
 
     // ------------------------------------------------------------------------------------------

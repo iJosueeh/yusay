@@ -13,6 +13,23 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
 
     private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
 
+    // Agregación JSON de las mediciones de un CheckIn, compartida por la lectura puntual
+    // (GetByIdOwnedAsync) y la paginada (ListOwnedPageAsync). {0} recibe el alias de la
+    // tabla check_in. El ORDER BY dimension_id replica el orden de la lectura por filas y
+    // permite que cabecera y mediciones se obtengan en una sola sentencia, con un único
+    // snapshot en READ COMMITTED (sin ventana entre cabecera y mediciones).
+    private const string MeasurementsJsonSelect = """
+        COALESCE((
+            SELECT json_agg(json_build_object(
+                'dimensionId', m.dimension_id,
+                'dimensionVersionId', m.dimension_version_id,
+                'value', m.value)
+            ORDER BY m.dimension_id)
+            FROM yusay.measurement m
+            WHERE m.check_in_id = {0}.check_in_id
+        ), '[]'::json)
+        """;
+
     public async Task<DateTimeOffset> GetDatabaseTimestampAsync(
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
@@ -101,33 +118,29 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        const string selectCheckInSql = """
+        // Una sola sentencia: cabecera y mediciones comparten un único snapshot de la
+        // sentencia en READ COMMITTED. Con dos sentencias independientes, una eliminación
+        // concurrente commiteada entre ambas dejaba la cabecera sin mediciones (GET 200
+        // con measurements vacío y PUT clasificado como 400 en lugar de 404). El
+        // predicado de ownership por user_id se conserva en la misma sentencia.
+        var sql = $"""
             SELECT
-                check_in_id,
-                user_id,
-                recorded_at,
-                created_at,
-                updated_at,
-                revision,
-                note
-            FROM yusay.check_in
-            WHERE check_in_id = @CheckInId AND user_id = @OwnerId;
-            """;
-
-        const string selectMeasurementsSql = """
-            SELECT
-                dimension_id,
-                dimension_version_id,
-                value
-            FROM yusay.measurement
-            WHERE check_in_id = @CheckInId
-            ORDER BY dimension_id;
+                c.check_in_id,
+                c.user_id,
+                c.recorded_at,
+                c.created_at,
+                c.updated_at,
+                c.revision,
+                c.note,
+                {string.Format(MeasurementsJsonSelect, "c")} AS measurements
+            FROM yusay.check_in c
+            WHERE c.check_in_id = @CheckInId AND c.user_id = @OwnerId;
             """;
 
         return await ExecuteWithConnectionAsync(transaction, async conn =>
         {
             var row = await conn.QuerySingleOrDefaultAsync<CheckInRow>(new CommandDefinition(
-                selectCheckInSql, new { CheckInId = checkInId, OwnerId = ownerId }, transaction,
+                sql, new { CheckInId = checkInId, OwnerId = ownerId }, transaction,
                 cancellationToken: cancellationToken));
 
             if (row is null)
@@ -135,16 +148,16 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
                 return null;
             }
 
-            var measurementRows = await conn.QueryAsync<MeasurementRow>(new CommandDefinition(
-                selectMeasurementsSql, new { CheckInId = checkInId }, transaction,
-                cancellationToken: cancellationToken));
-
-            var measurements = measurementRows
-                .Select(measurement => Measurement.Rehydrate(
-                    measurement.Dimension_id,
-                    measurement.Dimension_version_id,
-                    measurement.Value))
-                .ToArray();
+            var storedMeasurements =
+                JsonSerializer.Deserialize<ListMeasurementRow[]>(row.Measurements, JsonOptions) ?? [];
+            if (storedMeasurements.Length == 0)
+            {
+                // Misma guarda RN-030 que ListOwnedPageAsync: con la lectura atómica,
+                // cabecera visible sin mediciones es un estado imposible (se insertan y
+                // eliminan en la misma transacción), por lo que es un fallo de integridad.
+                throw new InvalidOperationException(
+                    $"Violación de integridad RN-030: el CheckIn {row.Check_in_id} no contiene Measurements.");
+            }
 
             return CheckIn.Rehydrate(
                 row.Check_in_id,
@@ -154,7 +167,12 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
                 row.Updated_at,
                 row.Revision,
                 row.Note,
-                measurements);
+                storedMeasurements
+                    .Select(measurement => Measurement.Rehydrate(
+                        measurement.DimensionId,
+                        measurement.DimensionVersionId,
+                        measurement.Value))
+                    .ToArray());
         }, cancellationToken);
     }
 
@@ -257,7 +275,7 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         Guid? cursorCheckInId,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
+        var sql = $"""
             WITH page AS (
                 SELECT
                     check_in_id,
@@ -279,15 +297,7 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
                 p.updated_at,
                 p.revision,
                 p.note,
-                COALESCE((
-                    SELECT json_agg(json_build_object(
-                        'dimensionId', m.dimension_id,
-                        'dimensionVersionId', m.dimension_version_id,
-                        'value', m.value)
-                    ORDER BY m.dimension_id)
-                    FROM yusay.measurement m
-                    WHERE m.check_in_id = p.check_in_id
-                ), '[]'::json) AS measurements
+                {string.Format(MeasurementsJsonSelect, "p")} AS measurements
             FROM page p
             ORDER BY p.recorded_at DESC, p.check_in_id DESC;
             """;
@@ -374,13 +384,7 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         public DateTimeOffset? Updated_at { get; init; }
         public int Revision { get; init; }
         public string? Note { get; init; }
-    }
-
-    private sealed class MeasurementRow
-    {
-        public Guid Dimension_id { get; init; }
-        public Guid Dimension_version_id { get; init; }
-        public int Value { get; init; }
+        public string Measurements { get; init; } = string.Empty;
     }
 
     private sealed class CheckInListRow
