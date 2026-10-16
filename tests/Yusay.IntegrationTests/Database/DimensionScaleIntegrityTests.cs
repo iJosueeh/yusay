@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Dapper;
 using Npgsql;
+using Yusay.Domain.Common;
+using Yusay.Domain.Tracking.ValueObjects;
 using Yusay.IntegrationTests.Infrastructure;
 
 namespace Yusay.IntegrationTests.Database;
@@ -12,6 +14,9 @@ namespace Yusay.IntegrationTests.Database;
 /// ACTIVE/RETIRED con semántica OLD.status — D-B2-3) y G4 (revalidación al cambiar la escala
 /// en DRAFT). Incluye reemplazo atómico, concurrencia real entre dos conexiones con
 /// sincronización explícita y tiempos de espera controlados, y regresiones de V015.
+/// La sección V018 cubre la aritmética de escala a 64 bits: escalas de rango extremo
+/// (int4 completo), step = 0 sin 22003/22012, triggers asociados a sus funciones y
+/// equivalencia de aceptación entre DimensionScale del dominio y PostgreSQL.
 /// Los errores se afirman por SQLSTATE (23514/23503/23505) sin traducción HTTP (D-B2-4).
 /// </summary>
 [Collection("DatabaseCollection")]
@@ -614,24 +619,255 @@ public sealed class DimensionScaleIntegrityTests
     }
 
     [Fact]
-    public async Task ChangeScale_InDraftWithZeroStep_ShouldRaise22012_FromV004EndpointCheck()
+    public async Task ChangeScale_InDraftWithZeroStep_ShouldRaise23514_FromStepPositiveCheck()
     {
         var (_, versionId) = await SeedVersionAsync();
 
         // G4 cede la palabra a los CHECK de V004 y no ejecuta su propio módulo con step = 0.
-        // El SQLSTATE observado es 22012 (division_by_zero): ck_dimension_version_scale_endpoint
-        // ((max - min) % step = 0) se evalúa antes que ck_dimension_version_step_positive
-        // (orden alfabético: "scale_endpoint" < "step_positive"), de modo que el módulo por
-        // cero de V004 ocurre antes de que step_positive pueda responder 23514. Es
-        // comportamiento preexistente de V004 — idéntico con o sin V017 — que no se puede
-        // corregir aquí sin alterar V001–V016. Riesgo para B4–B6: D-B2-4 deberá considerar
-        // también 22012 al traducir errores de escala a respuestas HTTP.
-        var exception = await AssertSqlStateAsync("22012", () => ExecuteAsync(
+        // Tras V018, ck_dimension_version_scale_endpoint protege internamente step <= 0 con un
+        // CASE (responde true) y evalúa el endpoint en bigint, de modo que
+        // ck_dimension_version_step_positive responde siempre el 23514 canónico con
+        // independencia del orden (no especificado) de evaluación de los CHECK: ni 22012
+        // (módulo por cero) ni 22003 (desbordamiento de la resta de extremos).
+        var exception = await AssertSqlStateAsync("23514", () => ExecuteAsync(
             "UPDATE yusay.dimension_version SET step = 0 WHERE dimension_version_id = @Id",
             new { Id = versionId }));
 
+        Assert.Equal("ck_dimension_version_step_positive", exception.ConstraintName);
+
         // El statement completo se revirtió: la escala original sigue intacta
         Assert.Equal(new[] { 1, 5, 1 }, await GetScaleAsync(versionId));
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // V018 — aritmética de escala a 64 bits (sin 22003/22012; 23514 canónico)
+    // ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task InsertVersion_ExtremeRangeWithStepOne_ShouldSucceed()
+    {
+        // El dominio acepta (int.MinValue, int.MaxValue, 1) con aritmética de 64 bits
+        // (OQ-DOM-008); V018 alinea el CHECK de V004: el residuo se calcula en bigint.
+        var (_, versionId) = await SeedVersionAsync(
+            minValue: int.MinValue, maxValue: int.MaxValue);
+
+        Assert.Equal(new[] { int.MinValue, int.MaxValue, 1 }, await GetScaleAsync(versionId));
+    }
+
+    [Fact]
+    public async Task InsertVersion_ExtremeRangeWithNonDividingStep_ShouldRaise23514_EndpointConstraint()
+    {
+        // Rango completo 4294967295 % 2 = 1: el endpoint sigue enforced con bigint
+        // (antes la resta en int4 elevaba 22003 antes de poder evaluar el residuo)
+        var exception = await AssertSqlStateAsync("23514", () => SeedVersionAsync(
+            minValue: int.MinValue, maxValue: int.MaxValue, step: 2));
+
+        Assert.Equal("ck_dimension_version_scale_endpoint", exception.ConstraintName);
+    }
+
+    [Fact]
+    public async Task InsertVersion_ZeroStepExtremeRange_ShouldRaise23514_StepPositiveConstraint()
+    {
+        // El CASE interno del CHECK corta antes del módulo: ni 22003 (resta de extremos)
+        // ni 22012 (módulo por cero), con independencia del orden de evaluación
+        var exception = await AssertSqlStateAsync("23514", () => SeedVersionAsync(
+            minValue: int.MinValue, maxValue: int.MaxValue, step: 0));
+
+        Assert.Equal("ck_dimension_version_step_positive", exception.ConstraintName);
+    }
+
+    [Fact]
+    public async Task InsertVersion_ZeroStepNormalRange_ShouldRaise23514_StepPositiveConstraint()
+    {
+        var exception = await AssertSqlStateAsync("23514", () => SeedVersionAsync(step: 0));
+
+        Assert.Equal("ck_dimension_version_step_positive", exception.ConstraintName);
+    }
+
+    [Fact]
+    public async Task InsertAnchor_OnExtremeScale_AtZeroAndAtMaxValue_ShouldSucceed()
+    {
+        // G1 con fn_anchor_within_scale a 64 bits: los offsets reales 0 - int.MinValue = 2^31
+        // y int.MaxValue - int.MinValue = 2^32 - 1 desbordaban en int4 dentro del trigger
+        var (_, versionId) = await SeedVersionAsync(minValue: int.MinValue, maxValue: int.MaxValue);
+
+        await ExecuteAsync(AnchorInsert(versionId, 0).CommandText, AnchorInsert(versionId, 0).Parameters);
+        await ExecuteAsync(
+            AnchorInsert(versionId, int.MaxValue).CommandText,
+            AnchorInsert(versionId, int.MaxValue).Parameters);
+
+        Assert.Equal(2, await CountAnchorsAsync(versionId));
+    }
+
+    [Fact]
+    public async Task InsertAnchor_OnExtremeScaleWithStepThree_NotAligned_ShouldRaise23514()
+    {
+        // Rango completo divisible entre 3 (4294967295 % 3 = 0): la versión es válida. El
+        // ancla 1 es alineada (offset 2^31 + 1, divisible entre 3) y la ancla 0 no (offset
+        // 2^31 ≡ 2 mod 3) → 23514 de G1 calculado en bigint, no 22003 de la resta en int4
+        var (_, versionId) = await SeedVersionAsync(
+            minValue: int.MinValue, maxValue: int.MaxValue, step: 3);
+
+        await ExecuteAsync(AnchorInsert(versionId, 1).CommandText, AnchorInsert(versionId, 1).Parameters);
+
+        var exception = await AssertSqlStateAsync("23514",
+            () => ExecuteAsync(AnchorInsert(versionId, 0).CommandText, AnchorInsert(versionId, 0).Parameters));
+
+        Assert.Contains("fuera de la escala", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(1, await CountAnchorsAsync(versionId));
+    }
+
+    [Fact]
+    public async Task ChangeScale_InDraftToExtremeRangeWithoutAnchors_ShouldSucceed()
+    {
+        // G4 con endpoint en bigint: sin V018 esta sentencia moría con 22003 en el propio
+        // trigger (camino de escritura del futuro PATCH de B5); ahora es un UPDATE válido
+        var (_, versionId) = await SeedVersionAsync();
+
+        await ExecuteAsync(
+            "UPDATE yusay.dimension_version SET min_value = @Min, max_value = @Max, step = 1 WHERE dimension_version_id = @Id",
+            new { Id = versionId, Min = int.MinValue, Max = int.MaxValue });
+
+        Assert.Equal(new[] { int.MinValue, int.MaxValue, 1 }, await GetScaleAsync(versionId));
+    }
+
+    [Fact]
+    public async Task ChangeScale_InDraftToExtremeRangeKeepingAnchorsValid_ShouldSucceed()
+    {
+        var (_, versionId) = await SeedVersionAsync();
+        await ExecuteAsync(AnchorInsert(versionId, 1).CommandText, AnchorInsert(versionId, 1).Parameters);
+        await ExecuteAsync(AnchorInsert(versionId, 5).CommandText, AnchorInsert(versionId, 5).Parameters);
+
+        await ExecuteAsync(
+            "UPDATE yusay.dimension_version SET min_value = @Min, max_value = @Max, step = 1 WHERE dimension_version_id = @Id",
+            new { Id = versionId, Min = int.MinValue, Max = int.MaxValue });
+
+        Assert.Equal(new[] { int.MinValue, int.MaxValue, 1 }, await GetScaleAsync(versionId));
+        Assert.Equal(2, await CountAnchorsAsync(versionId));
+    }
+
+    [Fact]
+    public async Task ChangeScale_InDraftToExtremeRangeWithNonDividingStep_ShouldRaise23514_EndpointConstraint()
+    {
+        // G4 cede la palabra al CHECK con su propio módulo ya en bigint (antes: 22003
+        // en el trigger antes de poder deferir); la escala original permanece intacta
+        var (_, versionId) = await SeedVersionAsync();
+
+        var exception = await AssertSqlStateAsync("23514", () => ExecuteAsync(
+            "UPDATE yusay.dimension_version SET min_value = @Min, max_value = @Max, step = 2 WHERE dimension_version_id = @Id",
+            new { Id = versionId, Min = int.MinValue, Max = int.MaxValue }));
+
+        Assert.Equal("ck_dimension_version_scale_endpoint", exception.ConstraintName);
+        Assert.Equal(new[] { 1, 5, 1 }, await GetScaleAsync(versionId));
+    }
+
+    [Fact]
+    public async Task Activate_ExtremeScaleDraftWithExtremeAnchors_ShouldSucceed()
+    {
+        // G2 con endpoint en bigint: la activación revalida las anclas extremas sin
+        // desbordar en la resta de extremos (el índice parcial single-active no aplica
+        // aquí: cada versión usa su propia dimensión)
+        var (_, versionId) = await SeedVersionAsync(minValue: int.MinValue, maxValue: int.MaxValue);
+        await ExecuteAsync(AnchorInsert(versionId, 0).CommandText, AnchorInsert(versionId, 0).Parameters);
+        await ExecuteAsync(
+            AnchorInsert(versionId, int.MaxValue).CommandText,
+            AnchorInsert(versionId, int.MaxValue).Parameters);
+
+        await ExecuteAsync(
+            "UPDATE yusay.dimension_version SET status = 'ACTIVE' WHERE dimension_version_id = @Id",
+            new { Id = versionId });
+
+        Assert.Equal("ACTIVE", await GetStatusAsync(versionId));
+        Assert.Equal(2, await CountAnchorsAsync(versionId));
+    }
+
+    [Fact]
+    public async Task ScaleEndpointConstraint_ShouldEvaluateInBigintWithStepGuard()
+    {
+        // Regresión estructural del CHECK de V018: conserva el nombre de V004 y evalúa en
+        // bigint con guarda CASE de step (el resto de operadores no se toca)
+        var definition = await CountStringAsync(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_dimension_version_scale_endpoint' AND conrelid = 'yusay.dimension_version'::regclass",
+            null);
+
+        Assert.Contains("bigint", definition, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CASE", definition, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ScaleTriggers_ShouldRemainAssociatedWithTheirFunctions()
+    {
+        // V018 redefinió las funciones con CREATE OR REPLACE: los triggers deben seguir
+        // resolviendo por OID a los cuerpos nuevos, sin recreación de objetos
+        var associations = await CountAsync("""
+            SELECT count(*)
+            FROM pg_trigger t
+            JOIN pg_proc p ON p.oid = t.tgfoid
+            WHERE NOT t.tgisinternal
+              AND (
+                  (t.tgname = 'trg_guard_dimension_anchor_scale'
+                   AND p.proname = 'fn_guard_dimension_anchor_scale'
+                   AND t.tgrelid = 'yusay.dimension_anchor'::regclass)
+                  OR (t.tgname = 'trg_validate_dimension_version_anchor_scale'
+                   AND p.proname = 'fn_validate_dimension_version_anchor_scale'
+                   AND t.tgrelid = 'yusay.dimension_version'::regclass)
+                  OR (t.tgname = 'trg_validate_dimension_version_activation'
+                   AND p.proname = 'fn_validate_dimension_version_activation'
+                   AND t.tgrelid = 'yusay.dimension_version'::regclass))
+            """);
+
+        Assert.Equal(3, associations);
+    }
+
+    public static TheoryData<int, int, int, bool> ScaleBoundaryTriples() => new()
+    {
+        { int.MinValue, int.MaxValue, 1, true },
+        { int.MinValue, int.MaxValue, 3, true },
+        { int.MinValue, int.MaxValue, 2, false },
+        { int.MinValue, int.MinValue + 1, 1, true },
+        { int.MaxValue - 1, int.MaxValue, 1, true },
+        { 1, 9, 2, true },
+        { 1, 10, 2, false },
+        { 1, 5, 1, true },
+        { -5, 5, 5, true },
+        { -5, 4, 5, false },
+        { 1, 1, 1, false },
+        { 5, 1, 1, false },
+        { 1, 5, 0, false },
+        { 1, 5, -1, false },
+    };
+
+    [Theory]
+    [MemberData(nameof(ScaleBoundaryTriples))]
+    public async Task ScaleAcceptance_ShouldMatchDimensionScaleCreate_OnBoundaryTriples(
+        int minValue, int maxValue, int step, bool expectedAccepted)
+    {
+        // Equivalencia dominio↔PostgreSQL tras V018: la aceptación de
+        // DimensionScale.Create (aritmética de 64 bits, OQ-DOM-008) coincide con la del
+        // esquema; todo rechazo de la base es 23514 canónico (sin 22003 ni 22012)
+        var domainAccepted = true;
+        try
+        {
+            DimensionScale.Create(minValue, maxValue, step);
+        }
+        catch (DomainException)
+        {
+            domainAccepted = false;
+        }
+
+        var databaseAccepted = true;
+        try
+        {
+            await SeedVersionAsync(minValue: minValue, maxValue: maxValue, step: step);
+        }
+        catch (PostgresException exception)
+        {
+            databaseAccepted = false;
+            Assert.Equal("23514", exception.SqlState);
+        }
+
+        Assert.Equal(expectedAccepted, domainAccepted);
+        Assert.Equal(expectedAccepted, databaseAccepted);
     }
 
     // ------------------------------------------------------------------------------------------
