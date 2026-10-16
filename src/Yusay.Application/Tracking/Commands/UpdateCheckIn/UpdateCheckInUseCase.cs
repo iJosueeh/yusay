@@ -73,7 +73,7 @@ public sealed class UpdateCheckInUseCase(
                         $"La DimensionVersion registrada para la Dimensión {input.DimensionId} no existe.");
 
                 ScaleValueValidation.EnsureReachable(
-                    input.DimensionId, input.Value, scale.MinValue, scale.MaxValue, scale.Step);
+                    input.DimensionId, input.Value, scale.Scale);
             }
 
             if (command.Measurements.Count != current.Measurements.Count)

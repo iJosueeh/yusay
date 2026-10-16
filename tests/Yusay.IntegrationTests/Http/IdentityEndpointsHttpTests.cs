@@ -241,16 +241,18 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         using var parsed = JsonDocument.Parse(document);
         var paths = parsed.RootElement.GetProperty("paths");
 
-        // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + CheckIn F2a/F2b-1/F2b-2)
+        // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + CheckIn F2a/F2b-1/F2b-2
+        // + catálogo de Dimensions B4 de RF-021)
         var routeNames = paths.EnumerateObject()
             .Select(path => path.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
         Assert.Equal(
             new[]
             {
-                "/auth/password-reset/confirm", "/auth/password-reset/request", "/auth/register",
-                "/auth/sign-in", "/auth/sign-out", "/auth/verify-email",
-                "/check-ins", "/check-ins/{checkInId}", "/health"
+                "/admin/dimensions", "/auth/password-reset/confirm", "/auth/password-reset/request",
+                "/auth/register", "/auth/sign-in", "/auth/sign-out", "/auth/verify-email",
+                "/check-ins", "/check-ins/{checkInId}", "/dimensions", "/dimensions/{dimensionId}",
+                "/health"
             },
             routeNames);
 
@@ -267,6 +269,11 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("UpdateCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "put"));
         Assert.Equal("DeleteCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "delete"));
         Assert.Equal("HealthCheck", ReadOperationId(paths, "/health", "get"));
+
+        // Catálogo de Dimensions (B4 de RF-021): operaciones de lectura con sus nombres
+        Assert.Equal("ListDimensions", ReadOperationId(paths, "/dimensions", "get"));
+        Assert.Equal("GetDimensionById", ReadOperationId(paths, "/dimensions/{dimensionId}", "get"));
+        Assert.Equal("ListAdministrativeDimensions", ReadOperationId(paths, "/admin/dimensions", "get"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)
@@ -327,6 +334,43 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
             "El 200 de GET /check-ins debe exponer la colección items.");
         Assert.True(listSchema.GetProperty("properties").TryGetProperty("nextCursor", out _),
             "El 200 de GET /check-ins debe exponer nextCursor.");
+
+        // Rutas del catálogo de Dimensions (B4 de RF-021): documentan exactamente sus
+        // códigos reales, sin cuerpo de solicitud ni parámetros de consulta. 200 con la
+        // colección items, 401 de la capa Bearer, 404 uniforme en el detalle y 403 de la
+        // política Administrator únicamente en la ruta administrativa
+        var dimensionsOperation = paths.GetProperty("/dimensions").GetProperty("get");
+        var dimensionsResponses = dimensionsOperation.GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "401", "503" }, dimensionsResponses);
+        Assert.False(dimensionsOperation.TryGetProperty("requestBody", out _),
+            "GET /dimensions no debe documentar requestBody.");
+
+        var dimensionsSchema = dimensionsOperation.GetProperty("responses").GetProperty("200")
+            .GetProperty("content").GetProperty("application/json").GetProperty("schema");
+        if (dimensionsSchema.TryGetProperty("$ref", out var dimensionsSchemaRef))
+        {
+            var dimensionsSchemaName = dimensionsSchemaRef.GetString()!.Split('/').Last();
+            dimensionsSchema = parsed.RootElement.GetProperty("components").GetProperty("schemas")
+                .GetProperty(dimensionsSchemaName);
+        }
+        Assert.True(dimensionsSchema.GetProperty("properties").TryGetProperty("items", out _),
+            "El 200 de GET /dimensions debe exponer la colección items.");
+
+        var dimensionByIdResponses = paths.GetProperty("/dimensions/{dimensionId}").GetProperty("get")
+            .GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "401", "404", "503" }, dimensionByIdResponses);
+
+        var adminDimensionsOperation = paths.GetProperty("/admin/dimensions").GetProperty("get");
+        var adminDimensionsResponses = adminDimensionsOperation.GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "401", "403", "503" }, adminDimensionsResponses);
+        Assert.False(adminDimensionsOperation.TryGetProperty("requestBody", out _),
+            "GET /admin/dimensions no debe documentar requestBody.");
 
         // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
         // ProblemDetails 400/401/503 — nunca el 200 fantasma que genera MVC sin metadatos

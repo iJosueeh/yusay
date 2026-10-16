@@ -2,6 +2,7 @@ using Yusay.Application.Common.Exceptions;
 using Yusay.Application.Tracking.Commands.UpdateCheckIn;
 using Yusay.Application.Tracking.Repositories;
 using Yusay.Domain.Tracking.Entities;
+using Yusay.Domain.Tracking.ValueObjects;
 using Yusay.Domain.UnitTests.Identity.Fakes;
 using Yusay.Domain.UnitTests.Tracking.Fakes;
 
@@ -44,7 +45,7 @@ public class UpdateCheckInUseCaseTests
 
     private void ArrangeStoredScale(Guid versionId, int minValue = 1, int maxValue = 5, int step = 1) =>
         _dimensionVersionRepo.StoredScales[versionId] =
-            new StoredDimensionScale(versionId, minValue, maxValue, step);
+            new StoredDimensionScale(versionId, DimensionScale.Create(minValue, maxValue, step));
 
     private CheckIn ArrangeCheckIn(
         DateTimeOffset? createdAt = null,

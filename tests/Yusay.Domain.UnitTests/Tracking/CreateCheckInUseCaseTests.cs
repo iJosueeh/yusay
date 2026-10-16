@@ -1,6 +1,7 @@
 using Yusay.Application.Common.Exceptions;
 using Yusay.Application.Tracking.Commands.CreateCheckIn;
 using Yusay.Application.Tracking.Repositories;
+using Yusay.Domain.Tracking.ValueObjects;
 using Yusay.Domain.UnitTests.Identity.Fakes;
 using Yusay.Domain.UnitTests.Tracking.Fakes;
 
@@ -25,7 +26,7 @@ public class CreateCheckInUseCaseTests
     private void ArrangeActiveDimension(int minValue = 1, int maxValue = 5, int step = 1)
     {
         _dimensionVersionRepo.ActiveScales[_dimensionId] =
-            new ActiveDimensionScale(Guid.NewGuid(), minValue, maxValue, step);
+            new ActiveDimensionScale(Guid.NewGuid(), DimensionScale.Create(minValue, maxValue, step));
     }
 
     private static CreateCheckInCommand CommandWith(
@@ -106,7 +107,8 @@ public class CreateCheckInUseCaseTests
     {
         ArrangeActiveDimension(1, 5, 1);
         var otherDimension = Guid.NewGuid();
-        _dimensionVersionRepo.ActiveScales[otherDimension] = new ActiveDimensionScale(Guid.NewGuid(), 0, 10, 2);
+        _dimensionVersionRepo.ActiveScales[otherDimension] =
+            new ActiveDimensionScale(Guid.NewGuid(), DimensionScale.Create(0, 10, 2));
         var useCase = CreateUseCase();
         var command = new CreateCheckInCommand(Now, "Día regular", 
         [
@@ -139,7 +141,8 @@ public class CreateCheckInUseCaseTests
     [Fact]
     public async Task ExecuteAsync_WithValueMisalignedWithStep_ShouldThrowValidation()
     {
-        ArrangeActiveDimension(1, 10, 2); // valores válidos: 1, 3, 5, 7, 9
+        // Escala legal según V004 ((9 - 1) % 2 = 0): valores válidos 1, 3, 5, 7, 9
+        ArrangeActiveDimension(1, 9, 2);
         var useCase = CreateUseCase();
 
         await Assert.ThrowsAsync<ValidationException>(

@@ -266,9 +266,9 @@ public sealed class CheckInUpdateRepositoryTests
 
         Assert.NotNull(scale);
         Assert.Equal(versionId, scale!.DimensionVersionId);
-        Assert.Equal(1, scale.MinValue);
-        Assert.Equal(9, scale.MaxValue);
-        Assert.Equal(2, scale.Step);
+        Assert.Equal(1, scale.Scale.MinValue);
+        Assert.Equal(9, scale.Scale.MaxValue);
+        Assert.Equal(2, scale.Scale.Step);
 
         // La resolución por estado ACTIVE ya no encuentra nada: la edición usa la versión almacenada
         Assert.Null(await _dimensionVersionRepository.GetActiveScaleAsync(dimensionId));

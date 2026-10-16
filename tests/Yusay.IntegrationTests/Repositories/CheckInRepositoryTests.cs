@@ -181,9 +181,9 @@ public sealed class CheckInRepositoryTests
 
         Assert.NotNull(scale);
         Assert.Equal(activeVersionId, scale!.DimensionVersionId);
-        Assert.Equal(1, scale.MinValue);
-        Assert.Equal(9, scale.MaxValue);
-        Assert.Equal(2, scale.Step);
+        Assert.Equal(1, scale.Scale.MinValue);
+        Assert.Equal(9, scale.Scale.MaxValue);
+        Assert.Equal(2, scale.Scale.Step);
     }
 
     [Fact]

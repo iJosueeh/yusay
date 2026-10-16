@@ -20,6 +20,9 @@ public static class DependencyInjection
         services.AddScoped<Tracking.Commands.UpdateCheckIn.IUpdateCheckInUseCase, Tracking.Commands.UpdateCheckIn.UpdateCheckInUseCase>();
         services.AddScoped<Tracking.Commands.DeleteCheckIn.IDeleteCheckInUseCase, Tracking.Commands.DeleteCheckIn.DeleteCheckInUseCase>();
         services.AddScoped<Tracking.Queries.ListCheckIns.IListCheckInsUseCase, Tracking.Queries.ListCheckIns.ListCheckInsUseCase>();
+        services.AddScoped<Tracking.Queries.ListDimensions.IListDimensionsUseCase, Tracking.Queries.ListDimensions.ListDimensionsUseCase>();
+        services.AddScoped<Tracking.Queries.GetDimensionById.IGetDimensionByIdUseCase, Tracking.Queries.GetDimensionById.GetDimensionByIdUseCase>();
+        services.AddScoped<Tracking.Queries.ListAdministrativeDimensions.IListAdministrativeDimensionsUseCase, Tracking.Queries.ListAdministrativeDimensions.ListAdministrativeDimensionsUseCase>();
 
         return services;
     }

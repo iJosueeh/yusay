@@ -72,7 +72,7 @@ public sealed class CreateCheckInUseCase(
                 }
 
                 ScaleValueValidation.EnsureReachable(
-                    input.DimensionId, input.Value, scale.MinValue, scale.MaxValue, scale.Step);
+                    input.DimensionId, input.Value, scale.Scale);
                 measurements.Add(Measurement.Create(input.DimensionId, scale.DimensionVersionId, input.Value));
             }
 

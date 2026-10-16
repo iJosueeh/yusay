@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Yusay.Application.Tracking.Repositories;
 using Yusay.Domain.Tracking.Entities;
+using Yusay.Domain.Tracking.Enums;
 
 namespace Yusay.Domain.UnitTests.Tracking.Fakes;
 
@@ -195,5 +196,79 @@ public sealed class FakeDimensionVersionRepository : IDimensionVersionRepository
     public Task<bool> DimensionExistsAsync(Guid dimensionId, DbTransaction? transaction = null, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(ExistingDimensions.Contains(dimensionId) || ActiveScales.ContainsKey(dimensionId));
+    }
+}
+
+public sealed class FakeDimensionCatalogRepository : IDimensionCatalogRepository
+{
+    public List<DimensionWithVersions> Items { get; } = new();
+
+    /// <summary>Invocaciones de las operaciones de lista, por operación.</summary>
+    public int ListPublishedCalls { get; private set; }
+
+    public int ListCompleteCalls { get; private set; }
+
+    /// <summary>Dimensiones solicitadas por GetWithHistoryAsync, en orden de invocación.</summary>
+    public List<Guid> HistoryCalls { get; } = new();
+
+    public Task<IReadOnlyList<DimensionWithVersions>> ListPublishedAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ListPublishedCalls++;
+
+        var items = Items
+            .Select(ApplyPublished)
+            .Where(item => item.Versions.Count > 0)
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyList<DimensionWithVersions>>(items);
+    }
+
+    public Task<DimensionWithVersions?> GetWithHistoryAsync(
+        Guid dimensionId,
+        CancellationToken cancellationToken = default)
+    {
+        HistoryCalls.Add(dimensionId);
+
+        var candidate = Items.FirstOrDefault(item => item.Dimension.DimensionId == dimensionId);
+        if (candidate is null)
+        {
+            return Task.FromResult<DimensionWithVersions?>(null);
+        }
+
+        var visible = ApplyHistory(candidate);
+        return Task.FromResult<DimensionWithVersions?>(visible.Versions.Count > 0 ? visible : null);
+    }
+
+    public Task<IReadOnlyList<DimensionWithVersions>> ListCompleteAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ListCompleteCalls++;
+
+        return Task.FromResult<IReadOnlyList<DimensionWithVersions>>(Items.ToArray());
+    }
+
+    // Réplica de los predicados de status del repositorio real (B4 de RF-021):
+    // publicable solo ACTIVE, histórico ACTIVE/RETIRED y completo sin filtro.
+    private static DimensionWithVersions ApplyPublished(DimensionWithVersions item)
+    {
+        var versions = item.Versions
+            .Where(version => version.Status == DimensionVersionStatus.Active)
+            .ToArray();
+
+        return versions.Length == item.Versions.Count
+            ? item
+            : item with { Versions = versions };
+    }
+
+    private static DimensionWithVersions ApplyHistory(DimensionWithVersions item)
+    {
+        var versions = item.Versions
+            .Where(version => version.Status is DimensionVersionStatus.Active or DimensionVersionStatus.Retired)
+            .ToArray();
+
+        return versions.Length == item.Versions.Count
+            ? item
+            : item with { Versions = versions };
     }
 }

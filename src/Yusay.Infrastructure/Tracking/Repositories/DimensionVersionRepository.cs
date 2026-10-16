@@ -2,6 +2,7 @@ using System.Data.Common;
 using Dapper;
 using Yusay.Application.Common.Interfaces;
 using Yusay.Application.Tracking.Repositories;
+using Yusay.Domain.Tracking.ValueObjects;
 
 namespace Yusay.Infrastructure.Tracking.Repositories;
 
@@ -31,7 +32,9 @@ public sealed class DimensionVersionRepository(IDbConnectionFactory connectionFa
 
             return row is null
                 ? null
-                : new ActiveDimensionScale(row.Dimension_version_id, row.Min_value, row.Max_value, row.Step);
+                : new ActiveDimensionScale(
+                    row.Dimension_version_id,
+                    DimensionScale.Create(row.Min_value, row.Max_value, row.Step));
         }, cancellationToken);
     }
 
@@ -57,7 +60,9 @@ public sealed class DimensionVersionRepository(IDbConnectionFactory connectionFa
 
             return row is null
                 ? null
-                : new StoredDimensionScale(row.Dimension_version_id, row.Min_value, row.Max_value, row.Step);
+                : new StoredDimensionScale(
+                    row.Dimension_version_id,
+                    DimensionScale.Create(row.Min_value, row.Max_value, row.Step));
         }, cancellationToken);
     }
 
