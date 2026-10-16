@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Yusay.Application.Common.Exceptions;
 using Yusay.Application.Tracking.Repositories;
 using Yusay.Domain.Tracking.Entities;
 using Yusay.Domain.Tracking.Enums;
@@ -270,5 +271,86 @@ public sealed class FakeDimensionCatalogRepository : IDimensionCatalogRepository
         return versions.Length == item.Versions.Count
             ? item
             : item with { Versions = versions };
+    }
+}
+
+// Doble de IDimensionAdministrationRepository (B5a de RF-021): réplica del contrato del
+// repositorio real —pre-check de code, traducción de 23505 acotada, lectura para edición
+// que devuelve una copia rehidratada (como el SELECT FOR UPDATE) y escritura que jamás
+// toca el code— con interruptores para simular carreras y fallos físicos.
+public sealed class FakeDimensionAdministrationRepository : IDimensionAdministrationRepository
+{
+    public List<Dimension> Dimensions { get; } = new();
+    public HashSet<string> ExistingCodes { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Invocaciones de la lectura bloqueada, por operación.</summary>
+    public int GetByIdForUpdateCalls { get; private set; }
+
+    /// <summary>Entidades devueltas por UpdateDetailsAsync, en orden de invocación.</summary>
+    public List<Dimension> Updated { get; } = new();
+
+    /// <summary>Simula la traducción de 23505 del repositorio real (code duplicado en la carrera).</summary>
+    public bool AddRaceYieldsDuplicateCode { get; set; }
+
+    /// <summary>Simula un fallo físico de inserción sin traducir (p. ej. PostgreSQL caído).</summary>
+    public Exception? AddFailure { get; set; }
+
+    public Task<bool> CodeExistsAsync(
+        string code,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(ExistingCodes.Contains(code));
+
+    public Task AddAsync(
+        Dimension dimension,
+        DbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (AddFailure is not null)
+        {
+            throw AddFailure;
+        }
+
+        if (AddRaceYieldsDuplicateCode || ExistingCodes.Contains(dimension.Code.Value))
+        {
+            throw new ConflictException(IDimensionAdministrationRepository.DuplicateCodeConflictMessage);
+        }
+
+        Dimensions.Add(dimension);
+        ExistingCodes.Add(dimension.Code.Value);
+        return Task.CompletedTask;
+    }
+
+    public Task<Dimension?> GetByIdForUpdateAsync(
+        Guid dimensionId,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        GetByIdForUpdateCalls++;
+
+        // Copia rehidratada, igual que la lectura FOR UPDATE del repositorio real: la
+        // mutación del caso de uso no afecta al almacén hasta UpdateDetailsAsync.
+        var stored = Dimensions.Find(dimension => dimension.DimensionId == dimensionId);
+        return Task.FromResult(stored is null
+            ? null
+            : Dimension.Rehydrate(stored.DimensionId, stored.Code, stored.Name, stored.Description));
+    }
+
+    public Task UpdateDetailsAsync(
+        Dimension dimension,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Updated.Add(dimension);
+
+        var index = Dimensions.FindIndex(stored => stored.DimensionId == dimension.DimensionId);
+        if (index >= 0)
+        {
+            var current = Dimensions[index];
+            Dimensions[index] = Dimension.Rehydrate(
+                current.DimensionId, current.Code, dimension.Name, dimension.Description);
+        }
+
+        return Task.CompletedTask;
     }
 }

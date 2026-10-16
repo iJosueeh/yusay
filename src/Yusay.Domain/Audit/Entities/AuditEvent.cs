@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Yusay.Domain.Common;
 
 namespace Yusay.Domain.Audit.Entities;
@@ -195,6 +196,86 @@ public sealed class AuditEvent
             targetIdentifier: null,
             occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
             metadata: null);
+    }
+
+    // Lista cerrada de changed_fields permitidos para CATALOG_UPDATED sobre DIMENSION
+    // (perfil C, 06-auditoría D06): la metadata no guarda valores anteriores ni nuevos.
+    private static readonly IReadOnlyCollection<string> DimensionCatalogChangedFields =
+        new HashSet<string>(StringComparer.Ordinal) { "name", "description" };
+
+    // V011 fila 14 (perfil N): metadata IS NULL para CATALOG_CREATED.
+    public static AuditEvent CreateCatalogCreated(
+        Guid dimensionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (dimensionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la dimensión para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_CREATED",
+            targetType: "DIMENSION",
+            targetIdentifier: dimensionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    // V011 fila 15 (perfil C): metadata opcional con la única clave changed_fields (array);
+    // los valores se limitan a la lista cerrada de DIMENSION (name, description).
+    public static AuditEvent CreateCatalogUpdated(
+        Guid dimensionId,
+        Guid administratorUserId,
+        IReadOnlyList<string> changedFields,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (dimensionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la dimensión para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        if (changedFields is null || changedFields.Count == 0)
+        {
+            throw new DomainException(
+                "La lista de campos modificados (changed_fields) de una edición de catálogo no puede estar vacía.");
+        }
+
+        foreach (var field in changedFields)
+        {
+            if (!DimensionCatalogChangedFields.Contains(field))
+            {
+                throw new DomainException(
+                    $"El campo '{field}' no está permitido en changed_fields de una edición de DIMENSION (lista cerrada: name, description).");
+            }
+        }
+
+        var metadata = JsonSerializer.Serialize(new { changed_fields = changedFields });
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_UPDATED",
+            targetType: "DIMENSION",
+            targetIdentifier: dimensionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: metadata);
     }
 
     public static AuditEvent Rehydrate(
