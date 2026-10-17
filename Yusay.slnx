@@ -1,5 +1,6 @@
-﻿<Solution>
+<Solution>
   <Folder Name="/src/">
+    <Project Path="src/Yusay.AdminCli/Yusay.AdminCli.csproj" />
     <Project Path="src/Yusay.AdminOperations/Yusay.AdminOperations.csproj" />
     <Project Path="src/Yusay.Api/Yusay.Api.csproj" />
     <Project Path="src/Yusay.Application/Yusay.Application.csproj" />
