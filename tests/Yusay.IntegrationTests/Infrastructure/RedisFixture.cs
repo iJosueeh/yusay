@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using Docker.DotNet;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using StackExchange.Redis;
@@ -15,16 +16,59 @@ namespace Yusay.IntegrationTests.Infrastructure;
 /// </summary>
 public sealed class RedisFixture : IAsyncLifetime
 {
-    // Puerto de host fijo y explícito (no aleatorio): con WithPortBinding(6379, true) Docker
-    // reasigna un puerto distinto en cada start del mismo contenedor, y el multiplexer
-    // existente quedaría reconectando para siempre contra el puerto viejo (fail-closed
-    // permanente) en lugar de probar el nuevo. Con puerto fijo —igual que docker-compose— la
-    // reconexión automática del cliente se ejercita igual que en producción.
-    private readonly IContainer _container = new ContainerBuilder("redis:8-alpine")
-        .WithPortBinding(GetFreeHostPort(), 6379)
-        .WithCommand("redis-server", "--appendonly", "yes", "--appendfsync", "everysec")
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Ready to accept connections"))
-        .Build();
+    // Puerto de host fijo y explícito (no aleatorio): con publicación automática
+    // (WithPortBinding(6379, true)) Docker resuelve el puerto en cada arranque del mismo
+    // contenedor —verificado empíricamente: tanto stop/start como restart reasignan el puerto—,
+    // y el multiplexer existente quedaría reconectando para siempre contra el puerto viejo
+    // (fail-closed permanente) en lugar de probar el nuevo. Con puerto fijo —igual que
+    // docker-compose— la reconexión automática del cliente se ejercita igual que en producción.
+    private const int MaxStartAttempts = 3;
+
+    private IContainer? _container;
+
+    // El puerto libre se reserva justo antes de arrancar el contenedor (no en la construcción
+    // del fixture), lo que cierra la ventana TOCTOU de la asignación anterior: si otro proceso
+    // llegara a tomar el puerto en ese intervalo, el bind falla y se reintenta con otro puerto
+    // libre, en lugar de dejar el fixture permanentemente inutilizable.
+    public async Task InitializeAsync()
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var container = BuildContainer(GetFreeHostPort());
+            try
+            {
+                await container.StartAsync();
+                _container = container;
+                return;
+            }
+            catch (DockerApiException exception) when (
+                attempt < MaxStartAttempts &&
+                exception.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
+            {
+                await container.DisposeAsync();
+            }
+            catch
+            {
+                await container.DisposeAsync();
+                throw;
+            }
+        }
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_container is not null)
+        {
+            await _container.DisposeAsync();
+        }
+    }
+
+    private static IContainer BuildContainer(int hostPort) =>
+        new ContainerBuilder("redis:8-alpine")
+            .WithPortBinding(hostPort, 6379)
+            .WithCommand("redis-server", "--appendonly", "yes", "--appendfsync", "everysec")
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Ready to accept connections"))
+            .Build();
 
     private static int GetFreeHostPort()
     {
@@ -35,40 +79,30 @@ public sealed class RedisFixture : IAsyncLifetime
         return port;
     }
 
-    public async Task InitializeAsync()
-    {
-        await _container.StartAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _container.DisposeAsync();
-    }
-
     /// <summary>Reinicia Redis conservando su volumen de datos (AOF), como un reinicio real.</summary>
     public async Task RestartAsync()
     {
-        await _container.StopAsync();
+        await _container!.StopAsync();
         await _container.StartAsync();
     }
 
     /// <summary>Detiene Redis para ejercitar la interrupción: el cliente debe fallar en fail-closed.</summary>
     public async Task StopAsync()
     {
-        await _container.StopAsync();
+        await _container!.StopAsync();
     }
 
     /// <summary>Vuelve a arrancar Redis conservando el volumen (AOF) para ejercitar la recuperación.</summary>
     public async Task StartAsync()
     {
-        await _container.StartAsync();
+        await _container!.StartAsync();
     }
 
     /// <summary>Host y puerto público del Redis del fixture, para configurar la API en pruebas HTTP.</summary>
-    public string Host => _container.Hostname;
+    public string Host => _container!.Hostname;
 
     /// <summary>Puerto de host asignado al contenedor (fijo durante toda la vida del fixture).</summary>
-    public int MappedPort => _container.GetMappedPublicPort(6379);
+    public int MappedPort => _container!.GetMappedPublicPort(6379);
 
     /// <summary>Conexión al Redis del fixture con timeouts cortos para los tests de fallo.</summary>
     public IConnectionMultiplexer Connect(int timeoutMilliseconds = 5000)
@@ -79,7 +113,7 @@ public sealed class RedisFixture : IAsyncLifetime
             ConnectTimeout = timeoutMilliseconds,
             SyncTimeout = timeoutMilliseconds
         };
-        options.EndPoints.Add(_container.Hostname, _container.GetMappedPublicPort(6379));
+        options.EndPoints.Add(_container!.Hostname, _container.GetMappedPublicPort(6379));
 
         return ConnectionMultiplexer.Connect(options);
     }

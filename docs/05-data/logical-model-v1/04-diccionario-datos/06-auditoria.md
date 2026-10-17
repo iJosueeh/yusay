@@ -165,6 +165,8 @@ Las operaciones de edición de definiciones internas de InstrumentVersion se des
 - **INSTRUMENT_VERSION_RETIRED:** PUBLISHED → RETIRED sin destruir historia.
 - **DIMENSION_VERSION_ACTIVATED:** DRAFT → ACTIVE; reemplazo coordinado atómicamente con retiro anterior.
 - **DIMENSION_VERSION_RETIRED:** ACTIVE → RETIRED preservando escala.
+
+Precisión de implementación (B6 de RF-021, temporal): por decisión aprobada (Opción C), la implementación actual separa ambas operaciones. POST /admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/activation devuelve 409 Conflict si la Dimensión ya tiene una versión ACTIVE, sin retiro automático, y el reemplazo exige retirar primero la versión activa y activar después, en dos operaciones. El significado del evento y el reemplazo atómico coordinado descritos arriba se mantienen como requisito normativo y siguen pendientes de implementación; VF-03 no queda satisfecho plenamente por B6. Esta precisión registra el estado de la implementación y no sustituye el catálogo de eventos.
 - **CONTEXT_TAG_ACTIVATED:** Reactivación RETIRED → ACTIVE, conservando significado; no creación inicial.
 - **CONTEXT_TAG_RETIRED:** ACTIVE → RETIRED, conservando vínculos históricos.
 - **RESOURCE_PUBLISHED:** DRAFT → PUBLISHED con contenido válido y Topics.

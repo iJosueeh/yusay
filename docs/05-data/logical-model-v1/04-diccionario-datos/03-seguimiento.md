@@ -94,6 +94,8 @@ DRAFT → ACTIVE → RETIRED; RETIRED es terminal. Definición, escala y Anchors
 
 Activación valida escala y Anchors, coordina unicidad de ACTIVE y creación concurrente de Measurements. Reemplazar una versión ACTIVE requiere retirar la anterior y activar la nueva en una misma operación atómica, conservando el máximo de una ACTIVE por Dimension. Retiro no elimina versiones ni invalida registros existentes; los cambios de valor siguen usando la versión original. El borrado de una cuenta no elimina esta definición compartida.
 
+Precisión de implementación (B6 de RF-021, temporal): por decisión aprobada (Opción C), la implementación actual separa ambas operaciones. POST /admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/activation devuelve 409 Conflict si la Dimensión ya tiene una versión ACTIVE, sin retiro automático, y el reemplazo exige retirar primero la versión activa y activar después, en dos operaciones. El reemplazo atómico coordinado descrito arriba sigue pendiente de implementación y VF-03 no queda satisfecho plenamente por B6. El requisito normativo original se mantiene; esta precisión registra el estado de la implementación y no lo sustituye.
+
 **Observaciones y trazabilidad:** AJ-03; VF-01/02/03/05; fuente §18. Se aplican las reglas comunes y las invariantes transaccionales siguientes.
 
 ## DIMENSION_ANCHOR

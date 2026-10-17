@@ -13,11 +13,6 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
 
     private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
 
-    // Agregación JSON de las mediciones de un CheckIn, compartida por la lectura puntual
-    // (GetByIdOwnedAsync) y la paginada (ListOwnedPageAsync). {0} recibe el alias de la
-    // tabla check_in. El ORDER BY dimension_id replica el orden de la lectura por filas y
-    // permite que cabecera y mediciones se obtengan en una sola sentencia, con un único
-    // snapshot en READ COMMITTED (sin ventana entre cabecera y mediciones).
     private const string MeasurementsJsonSelect = """
         COALESCE((
             SELECT json_agg(json_build_object(
@@ -118,11 +113,6 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        // Una sola sentencia: cabecera y mediciones comparten un único snapshot de la
-        // sentencia en READ COMMITTED. Con dos sentencias independientes, una eliminación
-        // concurrente commiteada entre ambas dejaba la cabecera sin mediciones (GET 200
-        // con measurements vacío y PUT clasificado como 400 en lugar de 404). El
-        // predicado de ownership por user_id se conserva en la misma sentencia.
         var sql = $"""
             SELECT
                 c.check_in_id,
@@ -152,9 +142,6 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
                 JsonSerializer.Deserialize<ListMeasurementRow[]>(row.Measurements, JsonOptions) ?? [];
             if (storedMeasurements.Length == 0)
             {
-                // Misma guarda RN-030 que ListOwnedPageAsync: con la lectura atómica,
-                // cabecera visible sin mediciones es un estado imposible (se insertan y
-                // eliminan en la misma transacción), por lo que es un fallo de integridad.
                 throw new InvalidOperationException(
                     $"Violación de integridad RN-030: el CheckIn {row.Check_in_id} no contiene Measurements.");
             }
@@ -247,9 +234,6 @@ public sealed class CheckInRepository(IDbConnectionFactory connectionFactory) : 
         DbTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
-        // OQ-DOM-009: eliminación permitida en cualquier momento (sin predicado temporal)
-        // con revisión optimista. El único DELETE de la operación dispara las cascadas FK
-        // de measurement y check_in_context_tag dentro de esta misma transacción.
         const string sql = """
             DELETE FROM yusay.check_in
             WHERE check_in_id = @CheckInId

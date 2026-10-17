@@ -99,6 +99,8 @@ version > 0, min_value < max_value, step > 0 y (max_value - min_value) divisible
 
 Si se reemplaza la ACTIVE, retiro de la anterior y activación de la nueva ocurren en una operación atómica, manteniendo máximo una ACTIVE. Los dos hechos pueden tener sus eventos respectivos, sin agregar ID transaccional al modelo.
 
+Precisión de implementación (B6 de RF-021, temporal): por decisión aprobada (Opción C), la implementación actual separa ambas operaciones. POST /admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/activation devuelve 409 Conflict si la Dimensión ya tiene una versión ACTIVE, sin retiro automático, y el reemplazo exige retirar primero la versión activa y activar después, en dos operaciones. El reemplazo atómico coordinado descrito arriba sigue pendiente de implementación y VF-03 no queda satisfecho plenamente por B6. El requisito normativo original se mantiene; esta precisión registra el estado de la implementación y no lo sustituye.
+
 Creación concurrente de Measurements comprueba ACTIVE en la operación coordinada y mantiene pertenencia a Dimension. Activar una nueva versión no remapea ni normaliza valores históricos.
 
 ### Historia y terminalidad

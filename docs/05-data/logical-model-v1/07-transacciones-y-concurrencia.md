@@ -72,6 +72,8 @@ Las operaciones concurrentes respetan un orden de confirmación coherente: una t
 
 Activación comprueba escala entera válida y Anchors coherentes. Máximo una DimensionVersion ACTIVE por Dimension. Al reemplazarla, retiro de la anterior y activación de la nueva son atómicos y conservan ese máximo.
 
+Precisión de implementación (B6 de RF-021, temporal): por decisión aprobada (Opción C), la implementación actual separa ambas operaciones. POST /admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/activation devuelve 409 Conflict si la Dimensión ya tiene una versión ACTIVE, sin retiro automático, y el reemplazo exige retirar primero la versión activa y activar después, en dos operaciones. El reemplazo atómico coordinado descrito arriba sigue pendiente de implementación y VF-03 no queda satisfecho plenamente por B6. El requisito normativo original se mantiene; esta precisión registra el estado de la implementación y no lo sustituye.
+
 La creación concurrente de Measurements comprueba ACTIVE y pertenencia a su Dimension en la operación coordinada. Retiro impide uso en Measurements nuevas, pero no invalida las históricas. Corregir una Measurement dentro de la ventana del CheckIn conserva versión original y escala, incluso RETIRED.
 
 No se remapean valores al activar otra versión ni se selecciona procedimiento físico de reemplazo.
