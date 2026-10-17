@@ -9,12 +9,17 @@ APP_USER="yusay_app"
 WORKER_USER="yusay_worker"
 BACKUP_USER="yusay_backup"
 
+# Rol operativo de alta/baja de administradores (B8b-1, OQ-ARCH-018(a)).
+# Fuera de MP-PHYS-014 hasta que OQ-ARCH-018 se resuelva y se enmiende el documento.
+ADMIN_OPS_USER="yusay_admin_ops"
+
 # Contraseña unificada para desarrollo local con soporte para sobreescritura individual
 DEFAULT_PASS="${DB_PASSWORD:-postgres_dev_password}"
 MIGRATOR_PASS="${MIGRATOR_DB_PASSWORD:-$DEFAULT_PASS}"
 APP_PASS="${APP_DB_PASSWORD:-$DEFAULT_PASS}"
 WORKER_PASS="${WORKER_DB_PASSWORD:-$DEFAULT_PASS}"
 BACKUP_PASS="${BACKUP_DB_PASSWORD:-$DEFAULT_PASS}"
+ADMIN_OPS_PASS="${ADMIN_OPS_DB_PASSWORD:-$DEFAULT_PASS}"
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
     -- 1. Rol de Migración (DDL exclusivo en esquema yusay)
@@ -57,11 +62,26 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     END
     \$\$;
 
+    -- 4b. Rol Operativo de Administración (B8b-1 / OQ-ARCH-018(a)): alta y baja de
+    -- administradores fuera de banda. Sin SUPERUSER, CREATEROLE, CREATEDB, BYPASSRLS
+    -- ni privilegios globales; la V019 concede únicamente SELECT, INSERT y DELETE
+    -- sobre yusay.administrator. El procedimiento de alta/baja y su bitácora quedan
+    -- pendientes de B8b-2.
+    DO \$\$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${ADMIN_OPS_USER}') THEN
+            CREATE ROLE ${ADMIN_OPS_USER} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION PASSWORD '${ADMIN_OPS_PASS}';
+            RAISE NOTICE 'Rol % creado con éxito.', '${ADMIN_OPS_USER}';
+        END IF;
+    END
+    \$\$;
+
     -- 5. Privilegios de conexión a la base de datos
     GRANT CONNECT, CREATE ON DATABASE ${POSTGRES_DB} TO ${MIGRATOR_USER};
     GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO ${APP_USER};
     GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO ${WORKER_USER};
     GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO ${BACKUP_USER};
+    GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO ${ADMIN_OPS_USER};
     GRANT pg_read_all_data TO ${BACKUP_USER};
 
     -- 6. Creación previa del esquema yusay asignando propiedad al rol de migraciones
@@ -73,6 +93,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     ALTER ROLE ${MIGRATOR_USER} SET search_path = yusay, pg_temp;
     ALTER ROLE ${APP_USER} SET search_path = yusay, pg_temp;
     ALTER ROLE ${WORKER_USER} SET search_path = yusay, pg_temp;
+    ALTER ROLE ${ADMIN_OPS_USER} SET search_path = yusay, pg_temp;
 
     -- 8. Extensiones criptográficas en public
     CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
