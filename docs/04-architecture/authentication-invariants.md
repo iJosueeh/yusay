@@ -36,7 +36,7 @@ Hoy son inalcanzables: el esquema nunca devuelve `Fail` (los fallos se lanzan) y
 
 - `tests/Yusay.IntegrationTests/Http/BearerAuthenticationHttpTests.cs` — 401/200/503 del endpoint protegido, `[Authorize]` a nivel de acción y de controlador, precedencia de `[AllowAnonymous]`, accesibilidad de los públicos con cabecera inválida, e idempotencia de SignOut (204/204 con una sola auditoría `SIGN_OUT`).
 - `tests/Yusay.IntegrationTests/Http/SignOutHttpEndpointsTests.cs` — 204 con auditoría y fail-closed 503.
-- El documento OpenAPI se verifica exacto (13 rutas, incluidas las de lectura del catálogo de Dimensions de B4/RF-021 y las de escritura administrativa POST/PATCH de B5a/RF-021): las sondas `[Authorize]` viven solo en el ensamblado de pruebas.
+- El documento OpenAPI se verifica exacto (15 rutas, incluidas las de lectura del catálogo de Dimensions de B4/RF-021, las de escritura administrativa POST/PATCH de Dimension de B5a/RF-021 y las de escritura administrativa POST/PATCH de versiones DRAFT de B5b/RF-021): las sondas `[Authorize]` viven solo en el ensamblado de pruebas.
 
 ## Restricciones de evolución
 

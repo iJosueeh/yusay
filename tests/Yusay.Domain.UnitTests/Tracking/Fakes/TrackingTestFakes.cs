@@ -3,6 +3,7 @@ using Yusay.Application.Common.Exceptions;
 using Yusay.Application.Tracking.Repositories;
 using Yusay.Domain.Tracking.Entities;
 using Yusay.Domain.Tracking.Enums;
+using Yusay.Domain.Tracking.ValueObjects;
 
 namespace Yusay.Domain.UnitTests.Tracking.Fakes;
 
@@ -274,14 +275,32 @@ public sealed class FakeDimensionCatalogRepository : IDimensionCatalogRepository
     }
 }
 
-// Doble de IDimensionAdministrationRepository (B5a de RF-021): réplica del contrato del
-// repositorio real —pre-check de code, traducción de 23505 acotada, lectura para edición
-// que devuelve una copia rehidratada (como el SELECT FOR UPDATE) y escritura que jamás
-// toca el code— con interruptores para simular carreras y fallos físicos.
+// Doble de IDimensionAdministrationRepository (B5a y B5b de RF-021): réplica del contrato
+// del repositorio real —pre-check de code/número de versión, traducción de 23505 acotada,
+// lectura para edición que devuelve una copia rehidratada (como el SELECT FOR UPDATE),
+// escritura de dimensiones que jamás toca el code y operaciones granulares de anclas— con
+// interruptores para simular carreras y fallos físicos. Operations registra la secuencia
+// completa de operaciones (lecturas bloqueadas incluidas) para asertar el orden de bloqueos
+// y de escritura que exige RF-021.
 public sealed class FakeDimensionAdministrationRepository : IDimensionAdministrationRepository
 {
     public List<Dimension> Dimensions { get; } = new();
     public HashSet<string> ExistingCodes { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Versiones almacenadas (reemplazo y lectura como copia FOR UPDATE).</summary>
+    public List<DimensionVersion> Versions { get; } = new();
+
+    /// <summary>Secuencia de operaciones observadas, por orden de invocación.</summary>
+    public List<string> Operations { get; } = new();
+
+    /// <summary>Invocaciones de la lectura bloqueada de versión, por operación.</summary>
+    public int GetVersionForUpdateCalls { get; private set; }
+
+    /// <summary>Simula la traducción de 23505 del repositorio real (número duplicado en la carrera).</summary>
+    public bool AddVersionRaceYieldsDuplicateNumber { get; set; }
+
+    /// <summary>Simula un fallo físico de inserción de versión sin traducir (p. ej. PostgreSQL caído).</summary>
+    public Exception? AddVersionFailure { get; set; }
 
     /// <summary>Invocaciones de la lectura bloqueada, por operación.</summary>
     public int GetByIdForUpdateCalls { get; private set; }
@@ -327,6 +346,7 @@ public sealed class FakeDimensionAdministrationRepository : IDimensionAdministra
         CancellationToken cancellationToken = default)
     {
         GetByIdForUpdateCalls++;
+        Operations.Add("GetByIdForUpdate");
 
         // Copia rehidratada, igual que la lectura FOR UPDATE del repositorio real: la
         // mutación del caso de uso no afecta al almacén hasta UpdateDetailsAsync.
@@ -353,4 +373,139 @@ public sealed class FakeDimensionAdministrationRepository : IDimensionAdministra
 
         return Task.CompletedTask;
     }
+
+    public Task<bool> VersionNumberExistsAsync(
+        Guid dimensionId,
+        int version,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("VersionNumberExists");
+        return Task.FromResult(Versions.Any(
+            stored => stored.DimensionId == dimensionId && stored.Version == version));
+    }
+
+    public Task AddVersionAsync(
+        DimensionVersion version,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("AddVersion");
+
+        if (AddVersionFailure is not null)
+        {
+            throw AddVersionFailure;
+        }
+
+        if (AddVersionRaceYieldsDuplicateNumber || Versions.Any(stored =>
+                stored.DimensionId == version.DimensionId && stored.Version == version.Version))
+        {
+            throw new ConflictException(
+                IDimensionAdministrationRepository.DuplicateVersionNumberConflictMessage);
+        }
+
+        Versions.Add(version);
+        return Task.CompletedTask;
+    }
+
+    public Task<DimensionVersion?> GetVersionForUpdateAsync(
+        Guid dimensionId,
+        Guid dimensionVersionId,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        GetVersionForUpdateCalls++;
+        Operations.Add("GetVersionForUpdate");
+
+        // Copia rehidratada, igual que la lectura FOR UPDATE del repositorio real.
+        var stored = Versions.Find(candidate =>
+            candidate.DimensionVersionId == dimensionVersionId &&
+            candidate.DimensionId == dimensionId);
+        return Task.FromResult(stored is null
+            ? null
+            : Rebuild(stored));
+    }
+
+    public Task UpdateVersionDetailsAsync(
+        Guid dimensionVersionId,
+        string definition,
+        int minValue,
+        int maxValue,
+        int step,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("UpdateVersionDetails");
+        ReplaceVersion(dimensionVersionId, stored => Rebuild(
+            stored, DimensionScale.Create(minValue, maxValue, step), definition));
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAnchorsAsync(
+        Guid dimensionVersionId,
+        IReadOnlyList<int> values,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("DeleteAnchors");
+        ReplaceVersion(dimensionVersionId, stored => Rebuild(
+            stored, anchors: stored.Anchors.Where(anchor => !values.Contains(anchor.Value))));
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateAnchorLabelAsync(
+        Guid dimensionVersionId,
+        int value,
+        string label,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("UpdateAnchorLabel");
+        ReplaceVersion(dimensionVersionId, stored => Rebuild(
+            stored,
+            anchors: stored.Anchors.Select(anchor =>
+                anchor.Value == value ? DimensionAnchor.Create(value, label) : anchor)));
+        return Task.CompletedTask;
+    }
+
+    public Task InsertAnchorsAsync(
+        Guid dimensionVersionId,
+        IReadOnlyList<DimensionAnchor> anchors,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("InsertAnchors");
+        ReplaceVersion(dimensionVersionId, stored => Rebuild(
+            stored, anchors: stored.Anchors.Concat(anchors)));
+        return Task.CompletedTask;
+    }
+
+    // Réplica de la escritura granular del repositorio real: cada operación rehidrata la
+    // versión almacenada con el campo que la sentencia SQL modifica (sin revalidar triggers
+    // de escala/anclas, cuya responsabilidad cubren las pruebas de integración).
+    private void ReplaceVersion(
+        Guid dimensionVersionId,
+        Func<DimensionVersion, DimensionVersion> mutate)
+    {
+        var index = Versions.FindIndex(
+            stored => stored.DimensionVersionId == dimensionVersionId);
+        if (index >= 0)
+        {
+            Versions[index] = mutate(Versions[index]);
+        }
+    }
+
+    private static DimensionVersion Rebuild(
+        DimensionVersion version,
+        DimensionScale? scale = null,
+        string? definition = null,
+        IEnumerable<DimensionAnchor>? anchors = null) =>
+        DimensionVersion.Rehydrate(
+            version.DimensionVersionId,
+            version.DimensionId,
+            version.Version,
+            scale ?? version.Scale,
+            definition ?? version.Definition,
+            version.Status,
+            anchors ?? version.Anchors);
 }

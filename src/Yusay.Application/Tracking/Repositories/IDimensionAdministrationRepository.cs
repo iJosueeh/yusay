@@ -1,22 +1,17 @@
 using System.Data.Common;
 using Yusay.Domain.Tracking.Entities;
+using Yusay.Domain.Tracking.ValueObjects;
 
 namespace Yusay.Application.Tracking.Repositories;
 
-// B5a de RF-021: escritura administrativa de Dimension (alta y edición de nombre y
-// descripción). code es inmutable tras el alta: solo se inserta, nunca se actualiza. La
-// lectura para edición se realiza con SELECT FOR UPDATE dentro de la transacción del caso
-// de uso, de modo que la detección de cambios efectivos y la escritura observan el mismo
-// estado bloqueado (última escritura gana; una fila no puede desaparecer tras el bloqueo,
-// por lo que la actualización no necesita comprobación de filas afectadas). La traducción
-// de SQLSTATE 23505 queda acotada a uq_dimension_code: el repositorio la convierte en
-// ConflictException con el mismo mensaje del pre-check; cualquier otro SQLSTATE se
-// propaga sin traducción (500).
+// traducir (500).
 public interface IDimensionAdministrationRepository
 {
-    /// <summary>Mensaje único de conflicto por código duplicado (pre-check y 23505).</summary>
     public const string DuplicateCodeConflictMessage =
         "Ya existe una Dimensión con el código proporcionado.";
+
+    public const string DuplicateVersionNumberConflictMessage =
+        "Ya existe una versión de la Dimensión con el número proporcionado.";
 
     Task<bool> CodeExistsAsync(
         string code,
@@ -35,6 +30,51 @@ public interface IDimensionAdministrationRepository
 
     Task UpdateDetailsAsync(
         Dimension dimension,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> VersionNumberExistsAsync(
+        Guid dimensionId,
+        int version,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task AddVersionAsync(
+        DimensionVersion version,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task<DimensionVersion?> GetVersionForUpdateAsync(
+        Guid dimensionId,
+        Guid dimensionVersionId,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateVersionDetailsAsync(
+        Guid dimensionVersionId,
+        string definition,
+        int minValue,
+        int maxValue,
+        int step,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteAnchorsAsync(
+        Guid dimensionVersionId,
+        IReadOnlyList<int> values,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateAnchorLabelAsync(
+        Guid dimensionVersionId,
+        int value,
+        string label,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task InsertAnchorsAsync(
+        Guid dimensionVersionId,
+        IReadOnlyList<DimensionAnchor> anchors,
         DbTransaction transaction,
         CancellationToken cancellationToken = default);
 }

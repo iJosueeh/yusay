@@ -4,15 +4,15 @@ using Yusay.Api.Authorization;
 using Yusay.Api.Common;
 using Yusay.Api.Contracts.Administration;
 using Yusay.Api.Contracts.Tracking;
+using Yusay.Application.Tracking.Commands;
 using Yusay.Application.Tracking.Commands.CreateDimension;
+using Yusay.Application.Tracking.Commands.CreateDimensionVersion;
 using Yusay.Application.Tracking.Commands.UpdateDimension;
+using Yusay.Application.Tracking.Commands.UpdateDimensionVersion;
 using Yusay.Application.Tracking.Queries.ListAdministrativeDimensions;
 
 namespace Yusay.Api.Controllers.Administration;
 
-// B4 y B5a de RF-021: lectura completa del catálogo (GET) y escritura administrativa
-// (POST/PATCH) bajo la política Administrator (OQ-ARCH-017). Las escrituras responden con
-// la representación fina DimensionDetailsResponse, sin colección de versiones (B5b).
 [ApiController]
 [Route("admin/dimensions")]
 [Authorize(Policy = AdministratorPolicy.Name)]
@@ -20,12 +20,18 @@ namespace Yusay.Api.Controllers.Administration;
 public sealed class DimensionAdminController(
     IListAdministrativeDimensionsUseCase listAdministrativeDimensionsUseCase,
     ICreateDimensionUseCase createDimensionUseCase,
-    IUpdateDimensionUseCase updateDimensionUseCase) : ControllerBase
+    IUpdateDimensionUseCase updateDimensionUseCase,
+    ICreateDimensionVersionUseCase createDimensionVersionUseCase,
+    IUpdateDimensionVersionUseCase updateDimensionVersionUseCase) : ControllerBase
 {
     private readonly IListAdministrativeDimensionsUseCase _listAdministrativeDimensionsUseCase =
         listAdministrativeDimensionsUseCase;
     private readonly ICreateDimensionUseCase _createDimensionUseCase = createDimensionUseCase;
     private readonly IUpdateDimensionUseCase _updateDimensionUseCase = updateDimensionUseCase;
+    private readonly ICreateDimensionVersionUseCase _createDimensionVersionUseCase =
+        createDimensionVersionUseCase;
+    private readonly IUpdateDimensionVersionUseCase _updateDimensionVersionUseCase =
+        updateDimensionVersionUseCase;
 
     [HttpGet]
     [EndpointName("ListAdministrativeDimensions")]
@@ -56,9 +62,6 @@ public sealed class DimensionAdminController(
             new CreateDimensionCommand(request.Code, request.Name, request.Description),
             cancellationToken);
 
-        // Sin header Location: no existe un GET de detalle administrativo al que apuntar, y
-        // GET /dimensions/{id} devuelve 404 para una Dimensión aún sin versiones (B4).
-        // La representación creada viaja completa en el cuerpo del 201.
         return StatusCode(
             StatusCodes.Status201Created,
             new DimensionDetailsResponse(result.DimensionId, result.Code, result.Name, result.Description));
@@ -82,5 +85,66 @@ public sealed class DimensionAdminController(
             cancellationToken);
 
         return Ok(new DimensionDetailsResponse(result.DimensionId, result.Code, result.Name, result.Description));
+    }
+
+    [HttpPost("{dimensionId:guid}/versions")]
+    [EndpointName("CreateDimensionVersion")]
+    [ProducesResponseType(typeof(DimensionVersionResponse), StatusCodes.Status201Created, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<DimensionVersionResponse>> CreateVersion(
+        Guid dimensionId,
+        CreateDimensionVersionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _createDimensionVersionUseCase.ExecuteAsync(
+            new CreateDimensionVersionCommand(
+                dimensionId,
+                request.Version,
+                request.Definition,
+                request.MinValue,
+                request.MaxValue,
+                request.Step,
+                request.Anchors?
+                    .Select(anchor => new AnchorInput(anchor.Value, anchor.Label))
+                    .ToArray()),
+            cancellationToken);
+
+        return StatusCode(StatusCodes.Status201Created, DimensionContractMapper.ToResponse(result));
+    }
+
+    [HttpPatch("{dimensionId:guid}/versions/{dimensionVersionId:guid}")]
+    [EndpointName("UpdateDimensionVersion")]
+    [ProducesResponseType(typeof(DimensionVersionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<DimensionVersionResponse>> UpdateVersion(
+        Guid dimensionId,
+        Guid dimensionVersionId,
+        UpdateDimensionVersionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _updateDimensionVersionUseCase.ExecuteAsync(
+            new UpdateDimensionVersionCommand(
+                dimensionId,
+                dimensionVersionId,
+                request.Definition,
+                request.MinValue,
+                request.MaxValue,
+                request.Step,
+                request.Anchors?
+                    .Select(anchor => new AnchorInput(anchor.Value, anchor.Label))
+                    .ToArray()),
+            cancellationToken);
+
+        return Ok(DimensionContractMapper.ToResponse(result));
     }
 }

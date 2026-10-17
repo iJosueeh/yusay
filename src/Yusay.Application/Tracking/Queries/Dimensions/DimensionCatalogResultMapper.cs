@@ -16,7 +16,7 @@ internal static class DimensionCatalogResultMapper
         entry.Dimension.Description,
         entry.Versions.Select(ToResult).ToArray());
 
-    private static DimensionVersionResult ToResult(DimensionVersion version) => new(
+    public static DimensionVersionResult ToResult(DimensionVersion version) => new(
         version.DimensionVersionId,
         version.Version,
         version.Status,

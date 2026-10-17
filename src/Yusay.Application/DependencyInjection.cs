@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddScoped<Tracking.Queries.ListAdministrativeDimensions.IListAdministrativeDimensionsUseCase, Tracking.Queries.ListAdministrativeDimensions.ListAdministrativeDimensionsUseCase>();
         services.AddScoped<Tracking.Commands.CreateDimension.ICreateDimensionUseCase, Tracking.Commands.CreateDimension.CreateDimensionUseCase>();
         services.AddScoped<Tracking.Commands.UpdateDimension.IUpdateDimensionUseCase, Tracking.Commands.UpdateDimension.UpdateDimensionUseCase>();
+        services.AddScoped<Tracking.Commands.CreateDimensionVersion.ICreateDimensionVersionUseCase, Tracking.Commands.CreateDimensionVersion.CreateDimensionVersionUseCase>();
+        services.AddScoped<Tracking.Commands.UpdateDimensionVersion.IUpdateDimensionVersionUseCase, Tracking.Commands.UpdateDimensionVersion.UpdateDimensionVersionUseCase>();
 
         return services;
     }

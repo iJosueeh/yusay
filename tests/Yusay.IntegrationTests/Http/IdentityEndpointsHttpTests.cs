@@ -242,14 +242,17 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         var paths = parsed.RootElement.GetProperty("paths");
 
         // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + CheckIn F2a/F2b-1/F2b-2
-        // + catálogo de Dimensions B4 de RF-021 + escritura administrativa B5a de RF-021)
+        // + catálogo de Dimensions B4 de RF-021 + escritura administrativa B5a/B5b de RF-021)
         var routeNames = paths.EnumerateObject()
             .Select(path => path.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
         Assert.Equal(
             new[]
             {
-                "/admin/dimensions", "/admin/dimensions/{dimensionId}", "/auth/password-reset/confirm",
+                "/admin/dimensions", "/admin/dimensions/{dimensionId}",
+                "/admin/dimensions/{dimensionId}/versions",
+                "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}",
+                "/auth/password-reset/confirm",
                 "/auth/password-reset/request", "/auth/register", "/auth/sign-in", "/auth/sign-out",
                 "/auth/verify-email", "/check-ins", "/check-ins/{checkInId}", "/dimensions",
                 "/dimensions/{dimensionId}", "/health"
@@ -270,12 +273,16 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("DeleteCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "delete"));
         Assert.Equal("HealthCheck", ReadOperationId(paths, "/health", "get"));
 
-        // Catálogo de Dimensions (B4 y B5a de RF-021): lecturas y escrituras con sus nombres
+        // Catálogo de Dimensions (B4, B5a y B5b de RF-021): lecturas y escrituras con sus nombres
         Assert.Equal("ListDimensions", ReadOperationId(paths, "/dimensions", "get"));
         Assert.Equal("GetDimensionById", ReadOperationId(paths, "/dimensions/{dimensionId}", "get"));
         Assert.Equal("ListAdministrativeDimensions", ReadOperationId(paths, "/admin/dimensions", "get"));
         Assert.Equal("CreateDimension", ReadOperationId(paths, "/admin/dimensions", "post"));
         Assert.Equal("UpdateDimension", ReadOperationId(paths, "/admin/dimensions/{dimensionId}", "patch"));
+        Assert.Equal("CreateDimensionVersion",
+            ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions", "post"));
+        Assert.Equal("UpdateDimensionVersion",
+            ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}", "patch"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)
@@ -401,6 +408,33 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Contains("UpdateDimensionRequest",
             updateRequestBody.GetProperty("content").GetProperty("application/json")
                 .GetProperty("schema").GetRawText(),
+            StringComparison.Ordinal);
+
+        // Escritura de versiones (B5b de RF-021): POST 201 con ProblemDetails
+        // 400/401/403/404/409/503; PATCH 200 con ProblemDetails 400/401/403/404/409/503
+        var createVersionOperation = paths.GetProperty("/admin/dimensions/{dimensionId}/versions")
+            .GetProperty("post");
+        var createVersionResponses = createVersionOperation.GetProperty("responses")
+            .EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "201", "400", "401", "403", "404", "409", "503" }, createVersionResponses);
+        Assert.Contains("CreateDimensionVersionRequest",
+            createVersionOperation.GetProperty("requestBody").GetProperty("content")
+                .GetProperty("application/json").GetProperty("schema").GetRawText(),
+            StringComparison.Ordinal);
+
+        var updateVersionOperation = paths
+            .GetProperty("/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}")
+            .GetProperty("patch");
+        var updateVersionResponses = updateVersionOperation.GetProperty("responses")
+            .EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "400", "401", "403", "404", "409", "503" }, updateVersionResponses);
+        Assert.Contains("UpdateDimensionVersionRequest",
+            updateVersionOperation.GetProperty("requestBody").GetProperty("content")
+                .GetProperty("application/json").GetProperty("schema").GetRawText(),
             StringComparison.Ordinal);
 
         // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
