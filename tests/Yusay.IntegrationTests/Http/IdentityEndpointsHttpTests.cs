@@ -242,7 +242,8 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         var paths = parsed.RootElement.GetProperty("paths");
 
         // Sin rutas duplicadas: exactamente las rutas acordadas (Identity + CheckIn F2a/F2b-1/F2b-2
-        // + catálogo de Dimensions B4 de RF-021 + escritura administrativa B5a/B5b de RF-021)
+        // + catálogo de Dimensions B4 de RF-021 + escritura administrativa B5a/B5b de RF-021
+        // + transición de estado de versiones B6 de RF-021)
         var routeNames = paths.EnumerateObject()
             .Select(path => path.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
@@ -252,6 +253,8 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/admin/dimensions", "/admin/dimensions/{dimensionId}",
                 "/admin/dimensions/{dimensionId}/versions",
                 "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}",
+                "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/activation",
+                "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/retirement",
                 "/auth/password-reset/confirm",
                 "/auth/password-reset/request", "/auth/register", "/auth/sign-in", "/auth/sign-out",
                 "/auth/verify-email", "/check-ins", "/check-ins/{checkInId}", "/dimensions",
@@ -273,7 +276,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("DeleteCheckIn", ReadOperationId(paths, "/check-ins/{checkInId}", "delete"));
         Assert.Equal("HealthCheck", ReadOperationId(paths, "/health", "get"));
 
-        // Catálogo de Dimensions (B4, B5a y B5b de RF-021): lecturas y escrituras con sus nombres
+        // Catálogo de Dimensions (B4, B5a, B5b y B6 de RF-021): lecturas y escrituras con sus nombres
         Assert.Equal("ListDimensions", ReadOperationId(paths, "/dimensions", "get"));
         Assert.Equal("GetDimensionById", ReadOperationId(paths, "/dimensions/{dimensionId}", "get"));
         Assert.Equal("ListAdministrativeDimensions", ReadOperationId(paths, "/admin/dimensions", "get"));
@@ -283,6 +286,10 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
             ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions", "post"));
         Assert.Equal("UpdateDimensionVersion",
             ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}", "patch"));
+        Assert.Equal("ActivateDimensionVersion",
+            ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/activation", "post"));
+        Assert.Equal("RetireDimensionVersion",
+            ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/retirement", "post"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)
@@ -436,6 +443,31 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
             updateVersionOperation.GetProperty("requestBody").GetProperty("content")
                 .GetProperty("application/json").GetProperty("schema").GetRawText(),
             StringComparison.Ordinal);
+
+        // Transiciones de estado (B6 de RF-021): POST 200 con la representación actualizada de
+        // la versión y ProblemDetails 400 (residual de activación)/401/403/404/409/503, sin
+        // cuerpo de solicitud ni Location
+        var activateOperation = paths
+            .GetProperty("/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/activation")
+            .GetProperty("post");
+        var activateResponses = activateOperation.GetProperty("responses")
+            .EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "400", "401", "403", "404", "409", "503" }, activateResponses);
+        Assert.False(activateOperation.TryGetProperty("requestBody", out _),
+            "POST activation no debe documentar requestBody.");
+
+        var retireOperation = paths
+            .GetProperty("/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/retirement")
+            .GetProperty("post");
+        var retireResponses = retireOperation.GetProperty("responses")
+            .EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "401", "403", "404", "409", "503" }, retireResponses);
+        Assert.False(retireOperation.TryGetProperty("requestBody", out _),
+            "POST retirement no debe documentar requestBody.");
 
         // sign-out documenta exactamente sus códigos reales: 204 (éxito idempotente) y
         // ProblemDetails 400/401/503 — nunca el 200 fantasma que genera MVC sin metadatos

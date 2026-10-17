@@ -480,6 +480,52 @@ public sealed class FakeDimensionAdministrationRepository : IDimensionAdministra
         return Task.CompletedTask;
     }
 
+    public bool ActiveVersionRaceYieldsConflict { get; set; }
+
+    public bool UpdateStatusReturnsNoRows { get; set; }
+
+    public Exception? UpdateStatusFailure { get; set; }
+
+    public Task<Guid?> GetActiveVersionIdAsync(
+        Guid dimensionId,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("GetActiveVersionId");
+        var active = Versions.Find(stored =>
+            stored.DimensionId == dimensionId &&
+            stored.Status == DimensionVersionStatus.Active);
+        return Task.FromResult(active?.DimensionVersionId);
+    }
+
+    public Task<bool> UpdateStatusAsync(
+        Guid dimensionVersionId,
+        DimensionVersionStatus status,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        Operations.Add("UpdateStatus");
+
+        if (UpdateStatusFailure is not null)
+        {
+            throw UpdateStatusFailure;
+        }
+
+        if (ActiveVersionRaceYieldsConflict)
+        {
+            throw new ConflictException(
+                IDimensionAdministrationRepository.AnotherActiveVersionConflictMessage);
+        }
+
+        if (UpdateStatusReturnsNoRows)
+        {
+            return Task.FromResult(false);
+        }
+
+        ReplaceVersion(dimensionVersionId, stored => Rebuild(stored, status: status));
+        return Task.FromResult(true);
+    }
+
     // Réplica de la escritura granular del repositorio real: cada operación rehidrata la
     // versión almacenada con el campo que la sentencia SQL modifica (sin revalidar triggers
     // de escala/anclas, cuya responsabilidad cubren las pruebas de integración).
@@ -499,13 +545,14 @@ public sealed class FakeDimensionAdministrationRepository : IDimensionAdministra
         DimensionVersion version,
         DimensionScale? scale = null,
         string? definition = null,
-        IEnumerable<DimensionAnchor>? anchors = null) =>
+        IEnumerable<DimensionAnchor>? anchors = null,
+        DimensionVersionStatus? status = null) =>
         DimensionVersion.Rehydrate(
             version.DimensionVersionId,
             version.DimensionId,
             version.Version,
             scale ?? version.Scale,
             definition ?? version.Definition,
-            version.Status,
+            status ?? version.Status,
             anchors ?? version.Anchors);
 }

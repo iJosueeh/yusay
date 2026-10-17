@@ -103,4 +103,63 @@ public class AuditEventCatalogVersionTests
         Assert.Throws<DomainException>(() =>
             AuditEvent.CreateCatalogVersionUpdated(Guid.NewGuid(), Guid.Empty, ["definition"]));
     }
+
+    [Fact]
+    public void CreateCatalogVersionActivated_ShouldEmitAdministratorTransitionEventWithNullMetadata()
+    {
+        var versionId = Guid.NewGuid();
+        var administratorId = Guid.NewGuid();
+
+        var audit = AuditEvent.CreateCatalogVersionActivated(versionId, administratorId, OccurredAt);
+
+        Assert.Equal("DIMENSION_VERSION_ACTIVATED", audit.Action);
+        Assert.Equal("ADMINISTRATOR", audit.ActorKind);
+        Assert.Equal(administratorId, audit.ActorUserId);
+        Assert.Equal("DIMENSION_VERSION", audit.TargetType);
+        Assert.Equal(versionId.ToString(), audit.TargetIdentifier);
+        Assert.Equal(OccurredAt, audit.OccurredAt);
+        Assert.Null(audit.Metadata);
+        Assert.NotEqual(Guid.Empty, audit.AuditEventId);
+    }
+
+    [Fact]
+    public void CreateCatalogVersionRetired_ShouldEmitAdministratorTransitionEventWithNullMetadata()
+    {
+        var versionId = Guid.NewGuid();
+        var administratorId = Guid.NewGuid();
+
+        var audit = AuditEvent.CreateCatalogVersionRetired(versionId, administratorId, OccurredAt);
+
+        Assert.Equal("DIMENSION_VERSION_RETIRED", audit.Action);
+        Assert.Equal("ADMINISTRATOR", audit.ActorKind);
+        Assert.Equal(administratorId, audit.ActorUserId);
+        Assert.Equal("DIMENSION_VERSION", audit.TargetType);
+        Assert.Equal(versionId.ToString(), audit.TargetIdentifier);
+        Assert.Equal(OccurredAt, audit.OccurredAt);
+        Assert.Null(audit.Metadata);
+        Assert.NotEqual(Guid.Empty, audit.AuditEventId);
+    }
+
+    [Fact]
+    public void CreateCatalogVersionTransitions_WithEmptyIdentifiers_ShouldThrowDomainException()
+    {
+        Assert.Throws<DomainException>(() =>
+            AuditEvent.CreateCatalogVersionActivated(Guid.Empty, Guid.NewGuid()));
+        Assert.Throws<DomainException>(() =>
+            AuditEvent.CreateCatalogVersionActivated(Guid.NewGuid(), Guid.Empty));
+        Assert.Throws<DomainException>(() =>
+            AuditEvent.CreateCatalogVersionRetired(Guid.Empty, Guid.NewGuid()));
+        Assert.Throws<DomainException>(() =>
+            AuditEvent.CreateCatalogVersionRetired(Guid.NewGuid(), Guid.Empty));
+    }
+
+    [Fact]
+    public void CreateCatalogVersionTransitions_WithoutExplicitIds_ShouldGenerateDistinctAuditEventIds()
+    {
+        var versionId = Guid.NewGuid();
+
+        Assert.NotEqual(
+            AuditEvent.CreateCatalogVersionActivated(versionId, Guid.NewGuid()).AuditEventId,
+            AuditEvent.CreateCatalogVersionRetired(versionId, Guid.NewGuid()).AuditEventId);
+    }
 }

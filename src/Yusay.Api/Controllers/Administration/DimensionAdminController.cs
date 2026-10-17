@@ -5,8 +5,10 @@ using Yusay.Api.Common;
 using Yusay.Api.Contracts.Administration;
 using Yusay.Api.Contracts.Tracking;
 using Yusay.Application.Tracking.Commands;
+using Yusay.Application.Tracking.Commands.ActivateDimensionVersion;
 using Yusay.Application.Tracking.Commands.CreateDimension;
 using Yusay.Application.Tracking.Commands.CreateDimensionVersion;
+using Yusay.Application.Tracking.Commands.RetireDimensionVersion;
 using Yusay.Application.Tracking.Commands.UpdateDimension;
 using Yusay.Application.Tracking.Commands.UpdateDimensionVersion;
 using Yusay.Application.Tracking.Queries.ListAdministrativeDimensions;
@@ -22,7 +24,9 @@ public sealed class DimensionAdminController(
     ICreateDimensionUseCase createDimensionUseCase,
     IUpdateDimensionUseCase updateDimensionUseCase,
     ICreateDimensionVersionUseCase createDimensionVersionUseCase,
-    IUpdateDimensionVersionUseCase updateDimensionVersionUseCase) : ControllerBase
+    IUpdateDimensionVersionUseCase updateDimensionVersionUseCase,
+    IActivateDimensionVersionUseCase activateDimensionVersionUseCase,
+    IRetireDimensionVersionUseCase retireDimensionVersionUseCase) : ControllerBase
 {
     private readonly IListAdministrativeDimensionsUseCase _listAdministrativeDimensionsUseCase =
         listAdministrativeDimensionsUseCase;
@@ -32,6 +36,10 @@ public sealed class DimensionAdminController(
         createDimensionVersionUseCase;
     private readonly IUpdateDimensionVersionUseCase _updateDimensionVersionUseCase =
         updateDimensionVersionUseCase;
+    private readonly IActivateDimensionVersionUseCase _activateDimensionVersionUseCase =
+        activateDimensionVersionUseCase;
+    private readonly IRetireDimensionVersionUseCase _retireDimensionVersionUseCase =
+        retireDimensionVersionUseCase;
 
     [HttpGet]
     [EndpointName("ListAdministrativeDimensions")]
@@ -143,6 +151,47 @@ public sealed class DimensionAdminController(
                 request.Anchors?
                     .Select(anchor => new AnchorInput(anchor.Value, anchor.Label))
                     .ToArray()),
+            cancellationToken);
+
+        return Ok(DimensionContractMapper.ToResponse(result));
+    }
+
+    [HttpPost("{dimensionId:guid}/versions/{dimensionVersionId:guid}/activation")]
+    [EndpointName("ActivateDimensionVersion")]
+    [ProducesResponseType(typeof(DimensionVersionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<DimensionVersionResponse>> ActivateVersion(
+        Guid dimensionId,
+        Guid dimensionVersionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _activateDimensionVersionUseCase.ExecuteAsync(
+            new ActivateDimensionVersionCommand(dimensionId, dimensionVersionId),
+            cancellationToken);
+
+        return Ok(DimensionContractMapper.ToResponse(result));
+    }
+
+    [HttpPost("{dimensionId:guid}/versions/{dimensionVersionId:guid}/retirement")]
+    [EndpointName("RetireDimensionVersion")]
+    [ProducesResponseType(typeof(DimensionVersionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<DimensionVersionResponse>> RetireVersion(
+        Guid dimensionId,
+        Guid dimensionVersionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _retireDimensionVersionUseCase.ExecuteAsync(
+            new RetireDimensionVersionCommand(dimensionId, dimensionVersionId),
             cancellationToken);
 
         return Ok(DimensionContractMapper.ToResponse(result));

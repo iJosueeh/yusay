@@ -17,6 +17,8 @@ public sealed class DimensionAdministrationRepository(IDbConnectionFactory conne
     private const string DuplicateVersionNumberConstraintName =
         "uq_dimension_version_dimension_id_version";
 
+    private const string SingleActiveVersionConstraintName = "uxp_dimension_version_single_active";
+
     private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
 
     public async Task<bool> CodeExistsAsync(
@@ -72,8 +74,6 @@ public sealed class DimensionAdministrationRepository(IDbConnectionFactory conne
             exception.SqlState == PostgresErrorCodes.UniqueViolation &&
             string.Equals(exception.ConstraintName, DuplicateCodeConstraintName, StringComparison.Ordinal))
         {
-            // Carrera entre el pre-check del caso de uso y esta inserción: se traduce con el
-            // mismo mensaje del pre-check para que el 409 sea uniforme e indistinguible.
             throw new ConflictException(IDimensionAdministrationRepository.DuplicateCodeConflictMessage);
         }
     }
@@ -83,9 +83,6 @@ public sealed class DimensionAdministrationRepository(IDbConnectionFactory conne
         DbTransaction transaction,
         CancellationToken cancellationToken = default)
     {
-        // FOR UPDATE sobre la fila de la Dimensión: el bloqueo serializa la edición contra
-        // otros PATCH concurrentes sobre la misma fila (última escritura gana) y se retiene
-        // hasta el fin de la transacción del caso de uso.
         const string sql = """
             SELECT dimension_id, code, name, description
             FROM yusay.dimension
@@ -305,6 +302,53 @@ public sealed class DimensionAdministrationRepository(IDbConnectionFactory conne
             transaction.Connection!, transaction, dimensionVersionId, anchors, cancellationToken);
     }
 
+    public async Task<Guid?> GetActiveVersionIdAsync(
+        Guid dimensionId,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT dimension_version_id
+            FROM yusay.dimension_version
+            WHERE dimension_id = @DimensionId AND status = 'ACTIVE';
+            """;
+
+        return await transaction.Connection!.ExecuteScalarAsync<Guid?>(new CommandDefinition(
+            sql, new { DimensionId = dimensionId }, transaction, cancellationToken: cancellationToken));
+    }
+
+    public async Task<bool> UpdateStatusAsync(
+        Guid dimensionVersionId,
+        DimensionVersionStatus status,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            UPDATE yusay.dimension_version
+            SET status = @Status
+            WHERE dimension_version_id = @DimensionVersionId;
+            """;
+
+        try
+        {
+            var affected = await transaction.Connection!.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { DimensionVersionId = dimensionVersionId, Status = ToStatusString(status) },
+                transaction,
+                cancellationToken: cancellationToken));
+
+            return affected == 1;
+        }
+        catch (PostgresException exception) when (
+            exception.SqlState == PostgresErrorCodes.UniqueViolation &&
+            string.Equals(exception.ConstraintName, SingleActiveVersionConstraintName,
+                StringComparison.Ordinal))
+        {
+            throw new ConflictException(
+                IDimensionAdministrationRepository.AnotherActiveVersionConflictMessage);
+        }
+    }
+
     private static async Task InsertAnchorsCoreAsync(
         DbConnection connection,
         DbTransaction transaction,
@@ -329,6 +373,15 @@ public sealed class DimensionAdministrationRepository(IDbConnectionFactory conne
             transaction,
             cancellationToken: cancellationToken));
     }
+
+    private static string ToStatusString(DimensionVersionStatus status) => status switch
+    {
+        DimensionVersionStatus.Draft => "DRAFT",
+        DimensionVersionStatus.Active => "ACTIVE",
+        DimensionVersionStatus.Retired => "RETIRED",
+        _ => throw new InvalidOperationException(
+            $"Estado de versión no reconocido para la escritura en yusay.dimension_version: '{status}'.")
+    };
 
     private static DimensionVersionStatus ParseStatus(string status) => status switch
     {

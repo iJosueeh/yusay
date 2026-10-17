@@ -346,6 +346,60 @@ public sealed class AuditEvent
             metadata: metadata);
     }
 
+    public static AuditEvent CreateCatalogVersionActivated(
+        Guid dimensionVersionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (dimensionVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "DIMENSION_VERSION_ACTIVATED",
+            targetType: "DIMENSION_VERSION",
+            targetIdentifier: dimensionVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateCatalogVersionRetired(
+        Guid dimensionVersionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (dimensionVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "DIMENSION_VERSION_RETIRED",
+            targetType: "DIMENSION_VERSION",
+            targetIdentifier: dimensionVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
     public static AuditEvent Rehydrate(
         Guid auditEventId,
         Guid? actorUserId,

@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Yusay.Domain.Tracking.Entities;
+using Yusay.Domain.Tracking.Enums;
 using Yusay.Domain.Tracking.ValueObjects;
 
 namespace Yusay.Application.Tracking.Repositories;
@@ -12,6 +13,9 @@ public interface IDimensionAdministrationRepository
 
     public const string DuplicateVersionNumberConflictMessage =
         "Ya existe una versión de la Dimensión con el número proporcionado.";
+
+    public const string AnotherActiveVersionConflictMessage =
+        "La Dimensión ya tiene una versión en estado ACTIVE; debe retirarse la versión activa antes de activar otra.";
 
     Task<bool> CodeExistsAsync(
         string code,
@@ -75,6 +79,17 @@ public interface IDimensionAdministrationRepository
     Task InsertAnchorsAsync(
         Guid dimensionVersionId,
         IReadOnlyList<DimensionAnchor> anchors,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task<Guid?> GetActiveVersionIdAsync(
+        Guid dimensionId,
+        DbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> UpdateStatusAsync(
+        Guid dimensionVersionId,
+        DimensionVersionStatus status,
         DbTransaction transaction,
         CancellationToken cancellationToken = default);
 }
