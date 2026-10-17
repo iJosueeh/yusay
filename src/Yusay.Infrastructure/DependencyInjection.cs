@@ -10,6 +10,8 @@ using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
 using Yusay.Infrastructure.Persistence;
 using Yusay.Infrastructure.Tracking.Repositories;
+using Yusay.Application.Assessment.Repositories;
+using Yusay.Infrastructure.Assessment.Repositories;
 
 namespace Yusay.Infrastructure;
 
@@ -38,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IDimensionVersionRepository, DimensionVersionRepository>();
         services.AddScoped<IDimensionCatalogRepository, DimensionCatalogRepository>();
         services.AddScoped<IDimensionAdministrationRepository, DimensionAdministrationRepository>();
+        services.AddScoped<IInstrumentAdministrationRepository, InstrumentAdministrationRepository>();
 
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();

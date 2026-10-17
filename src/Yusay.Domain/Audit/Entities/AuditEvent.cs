@@ -201,6 +201,108 @@ public sealed class AuditEvent
     private static readonly IReadOnlyCollection<string> DimensionCatalogChangedFields =
         new HashSet<string>(StringComparer.Ordinal) { "name", "description" };
 
+    private static readonly IReadOnlyCollection<string> InstrumentCatalogChangedFields =
+        new HashSet<string>(StringComparer.Ordinal) { "name", "description", "purpose" };
+
+    public static AuditEvent CreateInstrumentCreated(
+        Guid instrumentId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_CREATED",
+            targetType: "INSTRUMENT",
+            targetIdentifier: instrumentId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateInstrumentUpdated(
+        Guid instrumentId,
+        Guid administratorUserId,
+        IReadOnlyList<string> changedFields,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        if (changedFields is null || changedFields.Count == 0)
+        {
+            throw new DomainException(
+                "La lista de campos modificados (changed_fields) de una edición de catálogo no puede estar vacía.");
+        }
+
+        foreach (var field in changedFields)
+        {
+            if (!InstrumentCatalogChangedFields.Contains(field))
+            {
+                throw new DomainException(
+                    $"El campo '{field}' no está permitido en changed_fields de una edición de INSTRUMENT (lista cerrada: name, description, purpose).");
+            }
+        }
+
+        var metadata = JsonSerializer.Serialize(new { changed_fields = changedFields });
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_UPDATED",
+            targetType: "INSTRUMENT",
+            targetIdentifier: instrumentId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: metadata);
+    }
+
+    public static AuditEvent CreateInstrumentVersionCreated(
+        Guid instrumentVersionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_CREATED",
+            targetType: "INSTRUMENT_VERSION",
+            targetIdentifier: instrumentVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
     public static AuditEvent CreateCatalogCreated(
         Guid dimensionId,
         Guid administratorUserId,

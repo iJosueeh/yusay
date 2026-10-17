@@ -1,6 +1,31 @@
 using Microsoft.Extensions.DependencyInjection;
+using Yusay.Application.Assessment.Commands.CreateInstrument;
+using Yusay.Application.Assessment.Commands.CreateInstrumentVersion;
+using Yusay.Application.Assessment.Commands.UpdateInstrument;
+using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
+using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
+using Yusay.Application.Assessment.Queries.ListAdministrativeInstruments;
 using Yusay.Application.Identity.Commands.RegisterUser;
+using Yusay.Application.Identity.Commands.RequestPasswordReset;
+using Yusay.Application.Identity.Commands.ResetPassword;
+using Yusay.Application.Identity.Commands.SignIn;
+using Yusay.Application.Identity.Commands.SignOut;
 using Yusay.Application.Identity.Commands.VerifyEmail;
+using Yusay.Application.Identity.Queries.ValidateAccessToken;
+using Yusay.Application.Tracking.Commands.ActivateDimensionVersion;
+using Yusay.Application.Tracking.Commands.CreateCheckIn;
+using Yusay.Application.Tracking.Commands.CreateDimension;
+using Yusay.Application.Tracking.Commands.CreateDimensionVersion;
+using Yusay.Application.Tracking.Commands.DeleteCheckIn;
+using Yusay.Application.Tracking.Commands.RetireDimensionVersion;
+using Yusay.Application.Tracking.Commands.UpdateCheckIn;
+using Yusay.Application.Tracking.Commands.UpdateDimension;
+using Yusay.Application.Tracking.Commands.UpdateDimensionVersion;
+using Yusay.Application.Tracking.Queries.GetCheckInById;
+using Yusay.Application.Tracking.Queries.GetDimensionById;
+using Yusay.Application.Tracking.Queries.ListAdministrativeDimensions;
+using Yusay.Application.Tracking.Queries.ListCheckIns;
+using Yusay.Application.Tracking.Queries.ListDimensions;
 
 namespace Yusay.Application;
 
@@ -8,27 +33,39 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        services.AddScoped<ICreateInstrumentUseCase, CreateInstrumentUseCase>();
+        services.AddScoped<IUpdateInstrumentUseCase, UpdateInstrumentUseCase>();
+        services.AddScoped<ICreateInstrumentVersionUseCase, CreateInstrumentVersionUseCase>();
+        services.AddScoped<IListAdministrativeInstrumentsUseCase, ListAdministrativeInstrumentsUseCase>();
+        services.AddScoped<IGetAdministrativeInstrumentByIdUseCase, GetAdministrativeInstrumentByIdUseCase>();
+        services.AddScoped<IGetAdministrativeInstrumentVersionByIdUseCase, GetAdministrativeInstrumentVersionByIdUseCase>();
         services.AddScoped<IRegisterUserUseCase, RegisterUserUseCase>();
         services.AddScoped<IVerifyEmailUseCase, VerifyEmailUseCase>();
-        services.AddScoped<Identity.Commands.RequestPasswordReset.IRequestPasswordResetUseCase, Identity.Commands.RequestPasswordReset.RequestPasswordResetUseCase>();
-        services.AddScoped<Identity.Commands.ResetPassword.IResetPasswordUseCase, Identity.Commands.ResetPassword.ResetPasswordUseCase>();
-        services.AddScoped<Identity.Commands.SignIn.ISignInUseCase, Identity.Commands.SignIn.SignInUseCase>();
-        services.AddScoped<Identity.Commands.SignOut.ISignOutUseCase, Identity.Commands.SignOut.SignOutUseCase>();
-        services.AddScoped<Identity.Queries.ValidateAccessToken.IValidateAccessTokenUseCase, Identity.Queries.ValidateAccessToken.ValidateAccessTokenUseCase>();
-        services.AddScoped<Tracking.Commands.CreateCheckIn.ICreateCheckInUseCase, Tracking.Commands.CreateCheckIn.CreateCheckInUseCase>();
-        services.AddScoped<Tracking.Queries.GetCheckInById.IGetCheckInByIdUseCase, Tracking.Queries.GetCheckInById.GetCheckInByIdUseCase>();
-        services.AddScoped<Tracking.Commands.UpdateCheckIn.IUpdateCheckInUseCase, Tracking.Commands.UpdateCheckIn.UpdateCheckInUseCase>();
-        services.AddScoped<Tracking.Commands.DeleteCheckIn.IDeleteCheckInUseCase, Tracking.Commands.DeleteCheckIn.DeleteCheckInUseCase>();
-        services.AddScoped<Tracking.Queries.ListCheckIns.IListCheckInsUseCase, Tracking.Queries.ListCheckIns.ListCheckInsUseCase>();
-        services.AddScoped<Tracking.Queries.ListDimensions.IListDimensionsUseCase, Tracking.Queries.ListDimensions.ListDimensionsUseCase>();
-        services.AddScoped<Tracking.Queries.GetDimensionById.IGetDimensionByIdUseCase, Tracking.Queries.GetDimensionById.GetDimensionByIdUseCase>();
-        services.AddScoped<Tracking.Queries.ListAdministrativeDimensions.IListAdministrativeDimensionsUseCase, Tracking.Queries.ListAdministrativeDimensions.ListAdministrativeDimensionsUseCase>();
-        services.AddScoped<Tracking.Commands.CreateDimension.ICreateDimensionUseCase, Tracking.Commands.CreateDimension.CreateDimensionUseCase>();
-        services.AddScoped<Tracking.Commands.UpdateDimension.IUpdateDimensionUseCase, Tracking.Commands.UpdateDimension.UpdateDimensionUseCase>();
-        services.AddScoped<Tracking.Commands.CreateDimensionVersion.ICreateDimensionVersionUseCase, Tracking.Commands.CreateDimensionVersion.CreateDimensionVersionUseCase>();
-        services.AddScoped<Tracking.Commands.UpdateDimensionVersion.IUpdateDimensionVersionUseCase, Tracking.Commands.UpdateDimensionVersion.UpdateDimensionVersionUseCase>();
-        services.AddScoped<Tracking.Commands.ActivateDimensionVersion.IActivateDimensionVersionUseCase, Tracking.Commands.ActivateDimensionVersion.ActivateDimensionVersionUseCase>();
-        services.AddScoped<Tracking.Commands.RetireDimensionVersion.IRetireDimensionVersionUseCase, Tracking.Commands.RetireDimensionVersion.RetireDimensionVersionUseCase>();
+        services.AddScoped<IRequestPasswordResetUseCase, RequestPasswordResetUseCase>();
+        services.AddScoped<IResetPasswordUseCase, ResetPasswordUseCase>();
+        services.AddScoped<ISignInUseCase, SignInUseCase>();
+        services.AddScoped<ISignOutUseCase, SignOutUseCase>();
+        services.AddScoped<IValidateAccessTokenUseCase, ValidateAccessTokenUseCase>();
+        services.AddScoped<ICreateCheckInUseCase, CreateCheckInUseCase>();
+        services.AddScoped<IGetCheckInByIdUseCase, GetCheckInByIdUseCase>();
+        services.AddScoped<IUpdateCheckInUseCase, UpdateCheckInUseCase>();
+        services.AddScoped<IDeleteCheckInUseCase, DeleteCheckInUseCase>();
+        services.AddScoped<IListCheckInsUseCase, ListCheckInsUseCase>();
+        services.AddScoped<IListDimensionsUseCase, ListDimensionsUseCase>();
+        services.AddScoped<IGetDimensionByIdUseCase, GetDimensionByIdUseCase>();
+        services.AddScoped<IListAdministrativeDimensionsUseCase, ListAdministrativeDimensionsUseCase>();
+        services.AddScoped<ICreateDimensionUseCase, CreateDimensionUseCase>();
+        services.AddScoped<IUpdateDimensionUseCase, UpdateDimensionUseCase>();
+        services.AddScoped<ICreateDimensionVersionUseCase, CreateDimensionVersionUseCase>();
+        services.AddScoped<IUpdateDimensionVersionUseCase, UpdateDimensionVersionUseCase>();
+        services.AddScoped<IActivateDimensionVersionUseCase, ActivateDimensionVersionUseCase>();
+        services.AddScoped<IRetireDimensionVersionUseCase, RetireDimensionVersionUseCase>();
+        services.AddScoped<ICreateInstrumentUseCase, CreateInstrumentUseCase>();
+        services.AddScoped<IUpdateInstrumentUseCase, UpdateInstrumentUseCase>();
+        services.AddScoped<ICreateInstrumentVersionUseCase, CreateInstrumentVersionUseCase>();
+        services.AddScoped<IListAdministrativeInstrumentsUseCase, ListAdministrativeInstrumentsUseCase>();
+        services.AddScoped<IGetAdministrativeInstrumentByIdUseCase, GetAdministrativeInstrumentByIdUseCase>();
+        services.AddScoped<IGetAdministrativeInstrumentVersionByIdUseCase, GetAdministrativeInstrumentVersionByIdUseCase>();
 
         return services;
     }
