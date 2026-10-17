@@ -174,4 +174,27 @@ Se corrige el uso de cascadas en catálogos y contenido editorial para proteger 
    - Justificación: No existen en esta fase consultas de backend implementadas, volúmenes medidos, planes `EXPLAIN` reales ni parámetros de carga aprobados.
    - **OQ-NFR-001 permanece abierto:** Queda expresamente prohibido proponer o crear índices adicionales de optimización "preventiva" o inventar SLAs de tiempo de respuesta mientras no se disponga de la definición formal de perfiles de carga y consultas frecuentes del producto.
 
+---
+
+## MP-PHYS-017 — Aprovisionamiento administrativo fuera de banda, integridad e idempotencia en PostgreSQL (R1)
+
+1. **Invariante y problema:**
+   - La habilitación administrativa (`yusay.administrator`) se opera fuera de banda en el MVP sin endpoints de backend (OQ-ARCH-018 RESOLVED / B8b-2).
+   - Se exige que toda alta o baja en `yusay.administrator` quede registrada atómicamente en una bitácora inmutable en PostgreSQL (`yusay.administrative_provisioning_event`), garantizando idempotencia estricta ante desconexiones en el `COMMIT` o fallos de red.
+2. **Definición de tabla e integridad física:**
+   - **Clave primaria y token de idempotencia:** `pk_administrative_provisioning_event (event_id uuid)`. El identificador es generado por el cliente/runner antes del DML.
+   - **Referencia desacoplada del usuario objetivo:** `target_user_id uuid NOT NULL` sin clave foránea (`FOREIGN KEY`) hacia `user_account`. Esta decisión técnica evita bloquear un futuro borrado físico de cuentas en `user_account`, pero **no garantiza la supresión ni desvinculación de la identidad bajo VF-04** (la tensión entre la inmutabilidad de la bitácora y el derecho de supresión permanece formalmente abierta).
+   - **Restricciones de verificación:**
+     * `ck_administrative_provisioning_event_action CHECK (action IN ('ADMINISTRATOR_PROVISIONED', 'ADMINISTRATOR_REVOKED'))`
+     * `ck_administrative_provisioning_event_operator_not_empty CHECK (length(trim(operator_identifier)) > 0)`
+   - **Índice de auditoría:** `CREATE INDEX idx_administrative_provisioning_event_target_user ON yusay.administrative_provisioning_event (target_user_id);`
+3. **Mínimo privilegio estricto por columna (MP-PHYS-014):**
+   - Se neutralizan los privilegios por defecto de V001: revocación total (`REVOKE ALL PRIVILEGES`) a `yusay_app` y `yusay_worker`.
+   - Se prohíbe terminantemente otorgar privilegios `INSERT` globales a nivel de tabla (directos o heredados) al rol `yusay_admin_ops`.
+   - `yusay_admin_ops` recibe exclusivamente `SELECT` global e `INSERT` acotado a las columnas de negocio: `(event_id, target_user_id, action, operator_identifier, ticket_ref)`.
+   - Las columnas de auditoría técnica (`db_user`, `client_addr`, `occurred_at`) son forzadas por el motor mediante sus cláusulas `DEFAULT`. `CURRENT_USER` certifica el rol efectivo en PostgreSQL, **sin constituir una identidad humana verificada**; la atribución personal descansa en `operator_identifier`.
+4. **Condiciones para futura implementación:**
+   - Persistencia previa y recuperable del `event_id` generado por el runner antes de ejecutar el DML.
+   - Verificación automatizada de ausencia de privilegios `INSERT` globales directos o heredados sobre la tabla en los entornos de despliegue.
+
 [Índice físico](00-indice.md) · [Transacciones y concurrencia](04-transacciones-y-concurrencia.md) · [Privacidad y operación](05-privacidad-eliminacion-y-operacion.md).

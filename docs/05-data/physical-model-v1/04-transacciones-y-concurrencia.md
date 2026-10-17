@@ -200,4 +200,27 @@ Cada transición terminal elimina Answers parciales atómicamente. El orden cohe
 2. **Verificación de resultado incierto:**
    - Si la conexión se interrumpe durante el `COMMIT`, el backend debe consultar si el `user_id` todavía existe antes de reportar un fallo o reintentar. Si el usuario ya no existe, la supresión se considera exitosa.
 
+---
+
+## Protocolo transaccional de aprovisionamiento administrativo fuera de banda (MP-PHYS-017 / OQ-ARCH-018)
+
+1. **Protocolo transaccional atómico:**
+   - Toda habilitación o revocación administrativa fuera de banda se ejecuta como una unidad atómica única mediante el rol técnico `yusay_admin_ops`:
+     1. Iniciar transacción (`BEGIN;`).
+     2. En ALTA: `INSERT INTO yusay.administrator (user_id) VALUES (:target_user_id);`. Exigir `RowsAffected == 1`.
+     3. En BAJA: `DELETE FROM yusay.administrator WHERE user_id = :target_user_id;`. Exigir `RowsAffected == 1`. Si `RowsAffected == 0`, la cuenta no poseía la habilitación: la transacción ejecuta `ROLLBACK;` y no emite evento falso.
+     4. Insertar evento en `yusay.administrative_provisioning_event` con `event_id uuid` generado en cliente.
+     5. Confirmar transacción (`COMMIT;`).
+2. **Idempotencia mediante `event_id` y protocolo de reintentos:**
+   - **Paso A (Pre-inspección):** Antes del DML, consultar `SELECT target_user_id, action, operator_identifier, ticket_ref FROM yusay.administrative_provisioning_event WHERE event_id = :event_id`. Si la fila existe y sus 4 campos coinciden exactamente, retornar éxito previo sin ejecutar DML. Si existe pero algún campo difiere, abortar inmediatamente con error fatal de colisión. Si devuelve 0 filas, proceder al intento transaccional (una lectura sin fila no demuestra por sí sola rollback si la transacción previa sigue en curso).
+   - **Paso B (Revalidación tras conflictos relacionales):** Si la transacción es rechazada por conflicto en `pk_administrator` (`23505` en ALTA o `RowsAffected == 0` en BAJA) o por conflicto en `pk_administrative_provisioning_event` (`23505`):
+     * El runner ejecuta inmediatamente `ROLLBACK;` y revalida consultando por `event_id`.
+     * Si la fila ahora existe y coinciden plenamente los 4 campos (`target_user_id`, `action`, `operator_identifier`, `ticket_ref` con comparación segura de NULLs), se confirma que la transacción previa culminó exitosamente: retornar éxito confirmado.
+     * Si no existe: si el conflicto provino de `pk_administrator`, se confirma error de precondición legítimo (ya era administrador o nunca lo fue).
+   - **Paso C (Estado PENDIENTE_VERIFICACION persistente):** Si durante el `COMMIT` o durante la revalidación posterior ocurre un corte de red, timeout o fallo de conexión que impida comprobar fehacientemente el resultado en PostgreSQL, la operación permanecerá formalmente en estado `PENDIENTE_VERIFICACION`. Este estado persiste de forma duradera hasta que una verificación posterior (manual o automatizada) confirme si la operación consolidó su `COMMIT` o abortó.
+3. **Limitaciones operacionales declaradas:**
+   - **DML directo:** La obligatoriedad del registro es una garantía procedural del runner; `yusay_admin_ops` conserva DML directo en PostgreSQL por diseño de V019, permitiendo técnicamente mutaciones directas sin bitácora si se elude el runner.
+   - **Restauraciones:** Al residir en el mismo motor relacional, la bitácora se revierte junto con las copias de seguridad de PostgreSQL, careciendo de la independencia probatoria de un log inmutable externo.
+   - **Supresión de cuentas (VF-04):** `target_user_id` sin clave foránea evita bloquear la eliminación de cuentas en `user_account`, pero no garantiza la supresión ni desvinculación de la identidad bajo VF-04 (el identificador UUID permanece retenido).
+
 [Índice físico](00-indice.md) · [Integridad e índices](03-integridad-e-indices.md) · [Privacidad y operación](05-privacidad-eliminacion-y-operacion.md).

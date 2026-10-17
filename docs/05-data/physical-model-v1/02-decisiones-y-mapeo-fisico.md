@@ -114,6 +114,16 @@ A: transformación literal histórica no seleccionada. B: nombre objetivo aproba
 | R-031 | DIMENSION_TOPIC | contenido / [D05](../logical-model-v1/04-diccionario-datos/05-contenido.md#dimension_topic) | `yusay.dimension_topic` | `yusay.dimension_topic` | 15 |
 | R-032 | AUDIT_EVENT | auditoria / [D06](../logical-model-v1/04-diccionario-datos/06-auditoria.md#audit_event) | `yusay.audit_event` | `yusay.audit_event` | 11 |
 
+### Extensiones físicas operacionales versionadas (Fuera de la línea base R-001..R-032)
+
+El modelo lógico normativo congelado v1.0 preserva rigurosamente sus 32 relaciones y 147 columnas sin alteración.
+De conformidad con OQ-ARCH-018 RESOLVED, B8b-2 y [MP-PHYS-017](03-integridad-e-indices.md#mp-phys-017), se formaliza la siguiente extensión física operacional en PostgreSQL:
+
+| Extensión física operacional | Esquema | Propósito técnico | Clave Primaria / Restricciones | Bytes tabla | Estado normativo |
+| --- | --- | --- | --- | --- | --- |
+| `administrative_provisioning_event` | `yusay` | Bitácora relacional inmutable de aprovisionamiento/revocación fuera de banda de `administrator`. | `pk_administrative_provisioning_event (event_id)`; `ck_administrative_provisioning_event_action`; `ck_administrative_provisioning_event_operator_not_empty` | 33 | Extensión física operacional (OQ-ARCH-018 RESOLVED; no es R-033). |
+
+Convenciones aplicadas: cumple la regla léxica sin comillas en PostgreSQL 18, 33 bytes (< 63 bytes estándar), patrón de tabla en singular `snake_case`, PK de tipo `uuid` con patrón `pk_<tabla>`, e índice de búsqueda forense `idx_administrative_provisioning_event_target_user`.
 
 ## Matriz de 147 columnas
 

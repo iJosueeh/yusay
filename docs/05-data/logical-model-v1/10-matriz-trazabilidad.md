@@ -79,6 +79,12 @@ Las referencias a OQ-DATA señalan trazabilidad histórica: el hecho de recibir 
 | --- | --- | --- | --- |
 | [32. AUDIT_EVENT](especificacion-maestra-v1.0.md#32-audit_event) | Auditoría — capacidad Platform | RN-027; RNF-007; VF-04, VF-05 | Relación lógica de soporte aprobada; desvinculación personal y catálogos exactos aprobados en Auditoría (REV-LOG-001 RESOLVED). |
 
+### Extensión operacional de aprovisionamiento administrativo (Fuera del modelo lógico R-001..R-032)
+
+- La tabla física `yusay.administrative_provisioning_event` es una extensión física operacional de infraestructura en PostgreSQL para el registro fuera de banda de la habilitación y revocación de administradores ([OQ-ARCH-018 RESOLVED](../../06-decisions/README.md#oq-arch-018); B8b-2; [MP-PHYS-014](../physical-model-v1/05-privacidad-eliminacion-y-operacion.md#mp-phys-014); [MP-PHYS-017](../physical-model-v1/03-integridad-e-indices.md#mp-phys-017)).
+- **Preservación de la línea base:** No constituye una relación `R-033` ni altera el modelo lógico normativo congelado v1.0, el cual se mantiene estrictamente intacto en sus 32 relaciones y 147 columnas.
+- **Trazabilidad:** RN-027 (auditoría administrativa), RNF-006 (integridad transaccional), RNF-007 (retención e inmutabilidad operacional), RF-021 (administración de catálogos), MP-PHYS-014 (roles técnicos y menor privilegio) y MP-PHYS-017 (protocolo transaccional, revalidación determinista e idempotencia con `event_id`). Las decisiones OQ-NFR-004 y VF-04 continúan OPEN.
+
 ## Correspondencias sin relación persistente adicional
 
 - Note se representa mediante CHECK_IN.note opcional, compatible con 0..1 Value.

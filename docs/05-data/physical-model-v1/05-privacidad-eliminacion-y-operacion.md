@@ -79,11 +79,12 @@ La retención de auditoría no bloquea la supresión. DP-TRANS-001 permite que f
 
 1. **Separación de identidades técnicas en PostgreSQL:**
    - Se prohíbe el uso de `superuser` o del propietario del esquema para las operaciones habituales del backend.
-   - Se definen roles técnicos con privilegios mínimos de principio de menor privilegio:
-     * `yusay_app`: Rol para la API de aplicación. Privilegios `SELECT, INSERT, UPDATE, DELETE` en tablas de `yusay`. Sin permisos DDL ni `SUPERUSER` ni `BYPASSRLS`.
-     * `yusay_migrator`: Rol para migraciones DDL. Propietario del esquema o con permisos `CREATE, ALTER` controlados. Uso exclusivo durante despliegues controlados.
-     * `yusay_worker`: Rol para tareas de mantenimiento y limpieza por lotes (`DELETE` sobre intentos caducados y retención de auditoría).
-     * `yusay_backup`: Rol exclusivo para utilidades de copia de seguridad (`SELECT` sobre tablas o pertenencia a `pg_read_all_data`).
+   - Se definen cinco roles técnicos con privilegios mínimos y responsabilidades segregadas (B8b-1 / B8b-2; OQ-ARCH-018 RESOLVED):
+     * `yusay_app`: Rol para la API de aplicación. Exclusivamente DML sobre entidades del dominio (`SELECT, INSERT, UPDATE, DELETE`). Privilegios restringidos puntualmente en tablas sensibles: `SELECT` exclusivo sobre `yusay.administrator` (OQ-ARCH-017 / V019); `SELECT, INSERT` (append-only) sobre `yusay.audit_event` (V015); y **acceso denegado total (0 privilegios)** sobre `yusay.administrative_provisioning_event`. Sin permisos DDL ni `SUPERUSER` ni `BYPASSRLS`.
+     * `yusay_migrator`: Rol exclusivo para migraciones DDL (Flyway). Propietario del esquema `yusay`. Carece de `CREATEROLE` (el provisionamiento de roles se realiza fuera de Flyway).
+     * `yusay_worker`: Rol para tareas de mantenimiento y limpieza por lotes (`SELECT, DELETE` sobre intentos caducados y retención de auditoría `audit_event`). Acceso revocado en su totalidad (0 privilegios) sobre `yusay.administrator` y `yusay.administrative_provisioning_event`.
+     * `yusay_backup`: Rol exclusivo para utilidades de copia de seguridad (`SELECT` sobre tablas mediante pertenencia a `pg_read_all_data` de PostgreSQL 18).
+     * `yusay_admin_ops`: Rol operativo exclusivo para la gestión fuera de banda de administradores (B8b-1 / B8b-2; OQ-ARCH-018). Posee `SELECT, INSERT, DELETE` sobre `yusay.administrator` (sin `UPDATE` y sin `GRANT OPTION`). Sobre la extensión física operacional `yusay.administrative_provisioning_event` (MP-PHYS-017), se prohíbe terminantemente conceder privilegios `INSERT` globales a nivel de tabla (directos o heredados); posee exclusivamente `SELECT` global e `INSERT` restringido por columna (`event_id`, `target_user_id`, `action`, `operator_identifier`, `ticket_ref`). Las columnas técnicas `db_user`, `client_addr` y `occurred_at` son de solo lectura y forzadas por el motor con sus valores predeterminados. `CURRENT_USER` representa únicamente el rol de conexión efectivo en PostgreSQL y **no una identidad humana verificada**; la atribución personal descansa exclusivamente en `operator_identifier` autodeclarado y validado en el runner.
 2. **Control estricto de `search_path`:**
    - Para evitar ataques de suplantación de funciones u objetos (*search_path hijacking*), las conexiones de aplicación se configuran de forma fija y segura:
      `ALTER ROLE yusay_app SET search_path = yusay, pg_temp;`
