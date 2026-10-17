@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Yusay.Domain\Yusay.Domain.csproj" />
     <ProjectReference Include="..\..\src\Yusay.Application\Yusay.Application.csproj" />
     <ProjectReference Include="..\..\src\Yusay.Infrastructure\Yusay.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Yusay.AdminOperations\Yusay.AdminOperations.csproj" />
   </ItemGroup>
 
 </Project>
