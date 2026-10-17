@@ -120,6 +120,7 @@ Toda la documentación técnica se encuentra versionada y organizada en el direc
 * [**06 — Architecture Decision Records**](docs/06-decisions/):
   * [**ADR-001: Database Engine**](docs/06-decisions/ADR-001-database-engine.md) — Selección de PostgreSQL como motor relacional.
   * [**ADR-002: Technology Stack**](docs/06-decisions/ADR-002-technology-stack.md) — Consolidación de Next.js, ASP.NET Core 10 LTS, Dapper, Npgsql y Flyway.
+* [**07 — Operations**](docs/07-operations/): [Runbook de inicialización del catálogo de dimensiones](docs/07-operations/runbook-initial-dimension-catalog.md) (B8a de RF-021; aprovisionamiento del primer administrador pendiente de OQ-ARCH-018).
 
 ---
 
