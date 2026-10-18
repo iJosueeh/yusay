@@ -50,3 +50,20 @@ public sealed record AssessmentAttemptProgressResponse(
     DateTimeOffset StartedAt,
     DateTimeOffset ExpiresAt,
     IReadOnlyList<AttemptQuestionProgressResponse> Questions);
+
+public sealed record AssessmentInterpretationResponse(
+    Guid InterpretationId,
+    string Label,
+    string Description,
+    string? Limitations);
+
+public sealed record SubmitAssessmentAttemptResponse(
+    Guid AttemptId,
+    Guid InstrumentId,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    int Score,
+    AssessmentInterpretationResponse Interpretation);

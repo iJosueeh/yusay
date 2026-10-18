@@ -8,6 +8,7 @@ using Yusay.Application.Assessment.Commands.RetireInstrumentVersion;
 using Yusay.Application.Assessment.Commands.ReturnInstrumentVersionToDraft;
 using Yusay.Application.Assessment.Commands.SaveAssessmentAnswers;
 using Yusay.Application.Assessment.Commands.StartAssessmentAttempt;
+using Yusay.Application.Assessment.Commands.SubmitAssessmentAttempt;
 using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
@@ -80,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IStartAssessmentAttemptUseCase, StartAssessmentAttemptUseCase>();
         services.AddScoped<ISaveAssessmentAnswersUseCase, SaveAssessmentAnswersUseCase>();
         services.AddScoped<IGetAssessmentAttemptUseCase, GetAssessmentAttemptUseCase>();
+        services.AddScoped<ISubmitAssessmentAttemptUseCase, SubmitAssessmentAttemptUseCase>();
 
         return services;
     }

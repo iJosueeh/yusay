@@ -67,3 +67,34 @@ public sealed record AttemptDetailsHeaderDto(
     DateTimeOffset StartedAt,
     DateTimeOffset ExpiresAt,
     DateTimeOffset? EndedAt);
+
+public sealed record AssessmentInterpretationResultDto(
+    Guid InterpretationId,
+    string Label,
+    string Description,
+    string? Limitations);
+
+public sealed record SubmitAssessmentAttemptResult(
+    Guid AttemptId,
+    Guid InstrumentId,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    int Score,
+    AssessmentInterpretationResultDto Interpretation);
+
+public sealed record InterpretationDataDto(
+    Guid InterpretationId,
+    string Label,
+    string Description,
+    string? Limitations,
+    int LowerBound,
+    int UpperBound);
+
+public sealed record AssessmentSubmissionDataDto(
+    IReadOnlyList<Guid> RequiredQuestionIds,
+    IReadOnlyList<(Guid QuestionId, Guid OptionId)> UserAnswers,
+    IReadOnlyDictionary<(Guid QuestionId, Guid OptionId), int> Contributions,
+    IReadOnlyList<InterpretationDataDto> Interpretations);

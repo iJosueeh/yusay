@@ -73,4 +73,25 @@ public interface IAssessmentAttemptRepository
         Guid attemptId,
         DateTimeOffset endedAt,
         CancellationToken cancellationToken = default);
+
+    Task<SubmitAssessmentAttemptResult?> GetExistingOfficialResultAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
+
+    Task<AssessmentSubmissionDataDto?> GetSubmissionDataAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task SubmitAttemptAndSaveResultAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        int score,
+        Guid interpretationId,
+        DateTimeOffset submittedAt,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
 }

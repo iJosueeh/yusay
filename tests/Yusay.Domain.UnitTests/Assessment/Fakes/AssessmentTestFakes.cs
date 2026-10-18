@@ -518,4 +518,92 @@ public sealed class FakeAssessmentAttemptRepository : IAssessmentAttemptReposito
     {
         return ExpireAttemptAsync(attemptId, endedAt, null!, cancellationToken);
     }
+
+    public Dictionary<Guid, (int Score, Guid InterpretationId, DateTimeOffset CalculatedAt)> AttemptResults { get; } = new();
+    public Dictionary<Guid, List<Guid>> VersionRequiredQuestions { get; } = new();
+    public Dictionary<Guid, Dictionary<(Guid QuestionId, Guid OptionId), int>> VersionContributions { get; } = new();
+    public Dictionary<Guid, List<InterpretationDataDto>> VersionInterpretations { get; } = new();
+
+    public Task<SubmitAssessmentAttemptResult?> GetExistingOfficialResultAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        var attempt = Attempts.FirstOrDefault(a => a.AttemptId == attemptId && a.UserId == userId);
+        if (attempt is null || !AttemptResults.TryGetValue(attemptId, out var res))
+        {
+            return Task.FromResult<SubmitAssessmentAttemptResult?>(null);
+        }
+
+        var version = VersionNumbers.TryGetValue(attempt.InstrumentVersionId, out var ver) ? ver : 1;
+        var interp = VersionInterpretations.TryGetValue(attempt.InstrumentVersionId, out var interps)
+            ? interps.FirstOrDefault(i => i.InterpretationId == res.InterpretationId)
+            : null;
+
+        var interpDto = new AssessmentInterpretationResultDto(
+            interp?.InterpretationId ?? res.InterpretationId,
+            interp?.Label ?? "Interpretación",
+            interp?.Description ?? "Descripción",
+            interp?.Limitations);
+
+        return Task.FromResult<SubmitAssessmentAttemptResult?>(new SubmitAssessmentAttemptResult(
+            attempt.AttemptId,
+            attempt.InstrumentId,
+            attempt.InstrumentVersionId,
+            version,
+            attempt.Status.ToDbValue(),
+            attempt.StartedAt,
+            attempt.EndedAt ?? res.CalculatedAt,
+            res.Score,
+            interpDto));
+    }
+
+    public Task<AssessmentSubmissionDataDto?> GetSubmissionDataAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Guid> reqQuestions = VersionRequiredQuestions.TryGetValue(instrumentVersionId, out var req)
+            ? req
+            : Array.Empty<Guid>();
+
+        IReadOnlyList<(Guid QuestionId, Guid OptionId)> userAnswers = SavedAnswers.TryGetValue(attemptId, out var answers)
+            ? answers.Select(kv => (kv.Key, kv.Value)).ToList()
+            : Array.Empty<(Guid QuestionId, Guid OptionId)>();
+
+        IReadOnlyDictionary<(Guid QuestionId, Guid OptionId), int> contributions = VersionContributions.TryGetValue(instrumentVersionId, out var c)
+            ? c
+            : new Dictionary<(Guid QuestionId, Guid OptionId), int>();
+
+        IReadOnlyList<InterpretationDataDto> interps = VersionInterpretations.TryGetValue(instrumentVersionId, out var i)
+            ? i
+            : Array.Empty<InterpretationDataDto>();
+
+        return Task.FromResult<AssessmentSubmissionDataDto?>(new AssessmentSubmissionDataDto(
+            reqQuestions,
+            userAnswers,
+            contributions,
+            interps));
+    }
+
+    public Task SubmitAttemptAndSaveResultAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        int score,
+        Guid interpretationId,
+        DateTimeOffset submittedAt,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        AttemptResults[attemptId] = (score, interpretationId, submittedAt);
+        var idx = Attempts.FindIndex(a => a.AttemptId == attemptId);
+        if (idx >= 0)
+        {
+            Attempts[idx].Submit(submittedAt);
+        }
+
+        return Task.CompletedTask;
+    }
 }

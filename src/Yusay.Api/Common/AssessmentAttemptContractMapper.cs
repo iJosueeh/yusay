@@ -50,4 +50,20 @@ public static class AssessmentAttemptContractMapper
     public static IReadOnlyList<AssessmentAnswerItemDto> ToDtos(IReadOnlyList<AssessmentAnswerItemRequest>? items) =>
         items?.Select(i => new AssessmentAnswerItemDto(i.QuestionId, i.OptionId)).ToList()
         ?? (IReadOnlyList<AssessmentAnswerItemDto>)Array.Empty<AssessmentAnswerItemDto>();
+
+    public static SubmitAssessmentAttemptResponse ToResponse(SubmitAssessmentAttemptResult result) =>
+        new(
+            result.AttemptId,
+            result.InstrumentId,
+            result.InstrumentVersionId,
+            result.Version,
+            result.Status,
+            result.StartedAt,
+            result.EndedAt,
+            result.Score,
+            new AssessmentInterpretationResponse(
+                result.Interpretation.InterpretationId,
+                result.Interpretation.Label,
+                result.Interpretation.Description,
+                result.Interpretation.Limitations));
 }

@@ -472,6 +472,180 @@ public sealed class AssessmentAttemptRepository(IDbConnectionFactory connectionF
             .ToList();
     }
 
+    public async Task<SubmitAssessmentAttemptResult?> GetExistingOfficialResultAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+                a.attempt_id AS AttemptId,
+                a.instrument_id AS InstrumentId,
+                a.instrument_version_id AS InstrumentVersionId,
+                v.version AS Version,
+                a.status AS Status,
+                a.started_at AS StartedAt,
+                a.ended_at AS EndedAt,
+                r.score AS Score,
+                i.interpretation_id AS InterpretationId,
+                i.label AS InterpretationLabel,
+                i.description AS InterpretationDescription,
+                i.limitations AS InterpretationLimitations
+            FROM yusay.assessment_attempt a
+            JOIN yusay.instrument_version v ON v.instrument_version_id = a.instrument_version_id
+            JOIN yusay.assessment_result r ON r.attempt_id = a.attempt_id
+            JOIN yusay.interpretation i ON i.interpretation_id = r.interpretation_id
+            WHERE a.attempt_id = @AttemptId AND a.user_id = @UserId;
+            """;
+
+        var connection = transaction?.Connection;
+        if (connection is not null)
+        {
+            var row = await connection.QuerySingleOrDefaultAsync<OfficialResultRow>(new CommandDefinition(
+                sql,
+                new { AttemptId = attemptId, UserId = userId },
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+            return row is null ? null : MapOfficialResult(row);
+        }
+
+        await using var openConnection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var r = await openConnection.QuerySingleOrDefaultAsync<OfficialResultRow>(new CommandDefinition(
+            sql,
+            new { AttemptId = attemptId, UserId = userId },
+            cancellationToken: cancellationToken));
+
+        return r is null ? null : MapOfficialResult(r);
+    }
+
+    public async Task<AssessmentSubmissionDataDto?> GetSubmissionDataAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = transaction.Connection
+            ?? throw new InvalidOperationException("La transacción no tiene una conexión asociada.");
+
+        const string reqQuestionsSql = """
+            SELECT question_id
+            FROM yusay.question
+            WHERE instrument_version_id = @InstrumentVersionId AND required = true;
+            """;
+
+        const string userAnswersSql = """
+            SELECT question_id AS QuestionId, option_id AS OptionId
+            FROM yusay.answer
+            WHERE attempt_id = @AttemptId;
+            """;
+
+        const string contributionsSql = """
+            SELECT question_id AS QuestionId, option_id AS OptionId, contribution AS Contribution
+            FROM yusay.scoring_contribution
+            WHERE instrument_version_id = @InstrumentVersionId;
+            """;
+
+        const string interpretationsSql = """
+            SELECT interpretation_id AS InterpretationId, label AS Label, description AS Description,
+                   limitations AS Limitations, lower_bound AS LowerBound, upper_bound AS UpperBound
+            FROM yusay.interpretation
+            WHERE instrument_version_id = @InstrumentVersionId;
+            """;
+
+        var requiredQuestions = (await connection.QueryAsync<Guid>(new CommandDefinition(
+            reqQuestionsSql, new { InstrumentVersionId = instrumentVersionId }, transaction: transaction, cancellationToken: cancellationToken))).ToList();
+
+        var userAnswersRows = await connection.QueryAsync<QuestionOptionPairRow>(new CommandDefinition(
+            userAnswersSql, new { AttemptId = attemptId }, transaction: transaction, cancellationToken: cancellationToken));
+        var userAnswers = userAnswersRows.Select(a => (a.QuestionId, a.OptionId)).ToList();
+
+        var contributionsRows = await connection.QueryAsync<ScoringContributionRow>(new CommandDefinition(
+            contributionsSql, new { InstrumentVersionId = instrumentVersionId }, transaction: transaction, cancellationToken: cancellationToken));
+        var contributions = contributionsRows.ToDictionary(c => (c.QuestionId, c.OptionId), c => c.Contribution);
+
+        var interpretationsRows = await connection.QueryAsync<InterpretationRow>(new CommandDefinition(
+            interpretationsSql, new { InstrumentVersionId = instrumentVersionId }, transaction: transaction, cancellationToken: cancellationToken));
+        var interpretations = interpretationsRows.Select(i => new InterpretationDataDto(
+            i.InterpretationId,
+            i.Label,
+            i.Description,
+            i.Limitations,
+            i.LowerBound,
+            i.UpperBound)).ToList();
+
+        return new AssessmentSubmissionDataDto(
+            requiredQuestions,
+            userAnswers,
+            contributions,
+            interpretations);
+    }
+
+    public async Task SubmitAttemptAndSaveResultAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        int score,
+        Guid interpretationId,
+        DateTimeOffset submittedAt,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        var connection = transaction.Connection
+            ?? throw new InvalidOperationException("La transacción no tiene una conexión asociada.");
+
+        const string insertResultSql = """
+            INSERT INTO yusay.assessment_result (attempt_id, instrument_version_id, score, interpretation_id, calculated_at)
+            VALUES (@AttemptId, @InstrumentVersionId, @Score, @InterpretationId, @SubmittedAt);
+            """;
+
+        const string updateAttemptSql = """
+            UPDATE yusay.assessment_attempt
+            SET status = 'SUBMITTED',
+                ended_at = @SubmittedAt
+            WHERE attempt_id = @AttemptId;
+            """;
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            insertResultSql,
+            new
+            {
+                AttemptId = attemptId,
+                InstrumentVersionId = instrumentVersionId,
+                Score = score,
+                InterpretationId = interpretationId,
+                SubmittedAt = submittedAt
+            },
+            transaction: transaction,
+            cancellationToken: cancellationToken));
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            updateAttemptSql,
+            new
+            {
+                AttemptId = attemptId,
+                SubmittedAt = submittedAt
+            },
+            transaction: transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    private static SubmitAssessmentAttemptResult MapOfficialResult(OfficialResultRow r) =>
+        new(
+            r.AttemptId,
+            r.InstrumentId,
+            r.InstrumentVersionId,
+            r.Version,
+            r.Status,
+            r.StartedAt,
+            r.EndedAt,
+            r.Score,
+            new AssessmentInterpretationResultDto(
+                r.InterpretationId,
+                r.InterpretationLabel,
+                r.InterpretationDescription,
+                r.InterpretationLimitations));
+
     private sealed class QuestionOptionRow
     {
         public Guid QuestionId { get; init; }
@@ -525,5 +699,38 @@ public sealed class AssessmentAttemptRepository(IDbConnectionFactory connectionF
         public Guid OptionId { get; init; }
         public int OptionPosition { get; init; }
         public string OptionLabel { get; init; } = string.Empty;
+    }
+
+    private sealed class OfficialResultRow
+    {
+        public Guid AttemptId { get; init; }
+        public Guid InstrumentId { get; init; }
+        public Guid InstrumentVersionId { get; init; }
+        public int Version { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public DateTimeOffset StartedAt { get; init; }
+        public DateTimeOffset EndedAt { get; init; }
+        public int Score { get; init; }
+        public Guid InterpretationId { get; init; }
+        public string InterpretationLabel { get; init; } = string.Empty;
+        public string InterpretationDescription { get; init; } = string.Empty;
+        public string? InterpretationLimitations { get; init; }
+    }
+
+    private sealed class ScoringContributionRow
+    {
+        public Guid QuestionId { get; init; }
+        public Guid OptionId { get; init; }
+        public int Contribution { get; init; }
+    }
+
+    private sealed class InterpretationRow
+    {
+        public Guid InterpretationId { get; init; }
+        public string Label { get; init; } = string.Empty;
+        public string Description { get; init; } = string.Empty;
+        public string? Limitations { get; init; }
+        public int LowerBound { get; init; }
+        public int UpperBound { get; init; }
     }
 }

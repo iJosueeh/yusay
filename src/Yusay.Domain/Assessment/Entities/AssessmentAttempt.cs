@@ -107,4 +107,25 @@ public sealed class AssessmentAttempt
         Status = AssessmentAttemptStatus.Expired;
         EndedAt = ExpiresAt;
     }
+
+    public void Submit(DateTimeOffset submittedAt)
+    {
+        if (Status != AssessmentAttemptStatus.InProgress)
+        {
+            throw new DomainException("Solo se puede enviar un intento que esté en estado IN_PROGRESS.");
+        }
+
+        if (submittedAt < StartedAt)
+        {
+            throw new DomainException("La fecha de envío no puede ser anterior a la de inicio.");
+        }
+
+        if (submittedAt >= ExpiresAt)
+        {
+            throw new DomainException("No se puede enviar un intento que ya ha expirado.");
+        }
+
+        Status = AssessmentAttemptStatus.Submitted;
+        EndedAt = submittedAt;
+    }
 }
