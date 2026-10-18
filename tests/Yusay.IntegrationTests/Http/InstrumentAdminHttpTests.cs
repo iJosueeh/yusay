@@ -116,6 +116,18 @@ public sealed class InstrumentAdminHttpTests : IAsyncLifetime
 
         var missingPutDraft = await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/draft-definition", Json("""{"questions":[]}"""));
         await AssertProblemAsync(missingPutDraft, HttpStatusCode.Unauthorized, "No autorizado", MissingBearerMessage);
+
+        var missingMarkReady = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/mark-ready", Json("{}"));
+        await AssertProblemAsync(missingMarkReady, HttpStatusCode.Unauthorized, "No autorizado", MissingBearerMessage);
+
+        var missingReturnDraft = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/return-to-draft", Json("{}"));
+        await AssertProblemAsync(missingReturnDraft, HttpStatusCode.Unauthorized, "No autorizado", MissingBearerMessage);
+
+        var missingPublish = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/publish", Json("{}"));
+        await AssertProblemAsync(missingPublish, HttpStatusCode.Unauthorized, "No autorizado", MissingBearerMessage);
+
+        var missingRetire = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/retire", Json("{}"));
+        await AssertProblemAsync(missingRetire, HttpStatusCode.Unauthorized, "No autorizado", MissingBearerMessage);
     }
 
     [Fact]
@@ -145,6 +157,18 @@ public sealed class InstrumentAdminHttpTests : IAsyncLifetime
 
         var putDraft = await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/draft-definition", Json("""{"questions":[]}"""), accessToken);
         await AssertProblemAsync(putDraft, HttpStatusCode.Forbidden, "Acceso denegado", "habilitación administrativa");
+
+        var markReady = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/mark-ready", Json("{}"), accessToken);
+        await AssertProblemAsync(markReady, HttpStatusCode.Forbidden, "Acceso denegado", "habilitación administrativa");
+
+        var returnDraft = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/return-to-draft", Json("{}"), accessToken);
+        await AssertProblemAsync(returnDraft, HttpStatusCode.Forbidden, "Acceso denegado", "habilitación administrativa");
+
+        var publish = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/publish", Json("{}"), accessToken);
+        await AssertProblemAsync(publish, HttpStatusCode.Forbidden, "Acceso denegado", "habilitación administrativa");
+
+        var retire = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/retire", Json("{}"), accessToken);
+        await AssertProblemAsync(retire, HttpStatusCode.Forbidden, "Acceso denegado", "habilitación administrativa");
     }
 
     [Fact]
@@ -1090,6 +1114,272 @@ public sealed class InstrumentAdminHttpTests : IAsyncLifetime
             "SELECT count(*) FROM yusay.question WHERE instrument_version_id = @VersionId",
             new { VersionId = versionId });
         Assert.Equal(1, qCount);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // C3: Ciclo de Vida Editorial (mark-ready, return-to-draft, publish, retire)
+    // ------------------------------------------------------------------------------------------
+
+    private static HttpContent ValidPsychometricDraftPayload() => Json("""
+    {
+        "references": [
+            { "referenceOrder": 1, "citation": "Kroenke K. 2001.", "url": "https://doi.org/10.1046/phq9" }
+        ],
+        "questions": [
+            {
+                "position": 1,
+                "prompt": "¿Poco interés o alegría?",
+                "required": true,
+                "options": [
+                    { "position": 1, "label": "Nunca", "contribution": 0 },
+                    { "position": 2, "label": "Varios días", "contribution": 1 }
+                ]
+            },
+            {
+                "position": 2,
+                "prompt": "¿Se ha sentido decaído/a?",
+                "required": true,
+                "options": [
+                    { "position": 1, "label": "Nunca", "contribution": 0 },
+                    { "position": 2, "label": "Varios días", "contribution": 1 }
+                ]
+            }
+        ],
+        "interpretations": [
+            { "label": "Mínima", "description": "Depresión mínima", "lowerBound": 0, "upperBound": 1 },
+            { "label": "Leve", "description": "Depresión leve", "lowerBound": 2, "upperBound": 2 }
+        ]
+    }
+    """);
+
+    [Fact]
+    public async Task Lifecycle_FullHappyPath_Draft_Ready_Draft_Ready_Published_Retired()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c3_flow")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        // 1. Mark-ready fails if draft is empty/incomplete
+        var earlyReadyResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready", Json("{}"), accessToken);
+        await AssertProblemAsync(earlyReadyResp, HttpStatusCode.BadRequest, "Solicitud no válida", "no contiene ninguna pregunta");
+
+        // 2. Populate complete draft definition
+        var putDraftResp = await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", ValidPsychometricDraftPayload(), accessToken);
+        Assert.Equal(HttpStatusCode.OK, putDraftResp.StatusCode);
+
+        // 3. Mark-ready succeeds: DRAFT -> READY
+        var markReadyResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, markReadyResp.StatusCode);
+        using var readyDoc = JsonDocument.Parse(await markReadyResp.Content.ReadAsStringAsync());
+        Assert.Equal("READY", readyDoc.RootElement.GetProperty("status").GetString());
+
+        var readyAudits = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_READY");
+        Assert.Single(readyAudits);
+        Assert.Null(readyAudits[0].Metadata);
+
+        // 4. No-Op Idempotency on mark-ready (200 OK, no new audit)
+        var noOpReadyResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, noOpReadyResp.StatusCode);
+        var readyAuditsAfterNoOp = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_READY");
+        Assert.Single(readyAuditsAfterNoOp);
+
+        // 5. Return-to-draft: READY -> DRAFT
+        var returnDraftResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/return-to-draft", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, returnDraftResp.StatusCode);
+        using var draftDoc = JsonDocument.Parse(await returnDraftResp.Content.ReadAsStringAsync());
+        Assert.Equal("DRAFT", draftDoc.RootElement.GetProperty("status").GetString());
+
+        var returnAudits = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_RETURNED_TO_DRAFT");
+        Assert.Single(returnAudits);
+        Assert.Null(returnAudits[0].Metadata);
+
+        // 6. No-Op Idempotency on return-to-draft (200 OK, no new audit)
+        var noOpReturnResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/return-to-draft", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, noOpReturnResp.StatusCode);
+        var returnAuditsAfterNoOp = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_RETURNED_TO_DRAFT");
+        Assert.Single(returnAuditsAfterNoOp);
+
+        // 7. Transition back to READY
+        var reReadyResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, reReadyResp.StatusCode);
+
+        // 8. Publish: READY -> PUBLISHED
+        var publishResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/publish", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, publishResp.StatusCode);
+        using var pubDoc = JsonDocument.Parse(await publishResp.Content.ReadAsStringAsync());
+        Assert.Equal("PUBLISHED", pubDoc.RootElement.GetProperty("status").GetString());
+
+        var pubAudits = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_PUBLISHED");
+        Assert.Single(pubAudits);
+        Assert.Null(pubAudits[0].Metadata);
+
+        // 9. No-Op Idempotency on publish (200 OK, no new audit)
+        var noOpPubResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/publish", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, noOpPubResp.StatusCode);
+        var pubAuditsAfterNoOp = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_PUBLISHED");
+        Assert.Single(pubAuditsAfterNoOp);
+
+        // 10. Cannot modify definition or return to draft once published (409 Conflict)
+        var putWhilePubResp = await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", ValidPsychometricDraftPayload(), accessToken);
+        Assert.Equal(HttpStatusCode.Conflict, putWhilePubResp.StatusCode);
+
+        var returnWhilePubResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/return-to-draft", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.Conflict, returnWhilePubResp.StatusCode);
+
+        // 11. Retire: PUBLISHED -> RETIRED
+        var retireResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/retire", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, retireResp.StatusCode);
+        using var retDoc = JsonDocument.Parse(await retireResp.Content.ReadAsStringAsync());
+        Assert.Equal("RETIRED", retDoc.RootElement.GetProperty("status").GetString());
+
+        var retireAudits = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_RETIRED");
+        Assert.Single(retireAudits);
+        Assert.Null(retireAudits[0].Metadata);
+
+        // 12. No-Op Idempotency on retire (200 OK, no new audit)
+        var noOpRetireResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/retire", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, noOpRetireResp.StatusCode);
+        var retireAuditsAfterNoOp = await QueryAuditAsync(versionId, "INSTRUMENT_VERSION_RETIRED");
+        Assert.Single(retireAuditsAfterNoOp);
+
+        // 13. Terminal state RETIRED cannot transition to anything
+        var markReadyFromRetired = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.Conflict, markReadyFromRetired.StatusCode);
+
+        var pubFromRetired = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/publish", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.Conflict, pubFromRetired.StatusCode);
+    }
+
+    [Fact]
+    public async Task MarkReady_WithoutStructuredReferences_ShouldSucceedBecauseSourceDescriptionIsDocumented()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c3_noref")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        // Payload with 0 structured references
+        var payloadWithoutReferences = Json("""
+        {
+            "references": [],
+            "questions": [
+                {
+                    "position": 1,
+                    "prompt": "¿Pregunta única?",
+                    "required": true,
+                    "options": [
+                        { "position": 1, "label": "No", "contribution": 0 },
+                        { "position": 2, "label": "Sí", "contribution": 1 }
+                    ]
+                }
+            ],
+            "interpretations": [
+                { "label": "No", "description": "Negativo", "lowerBound": 0, "upperBound": 0 },
+                { "label": "Sí", "description": "Positivo", "lowerBound": 1, "upperBound": 1 }
+            ]
+        }
+        """);
+
+        await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", payloadWithoutReferences, accessToken);
+
+        var markReadyResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, markReadyResp.StatusCode);
+
+        var pubResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{versionId}/publish", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, pubResp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Publish_WhenAnotherVersionIsAlreadyPublished_ShouldReturn409ConflictAndNotPersistAudit()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c3_dup_pub")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        // Version 1: Create, put definition, mark-ready, publish
+        var v1Resp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var v1Id = await ReadGuidPropertyAsync(v1Resp, "instrumentVersionId");
+        await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{v1Id}/draft-definition", ValidPsychometricDraftPayload(), accessToken);
+        await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v1Id}/mark-ready", Json("{}"), accessToken);
+        var pubV1Resp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v1Id}/publish", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, pubV1Resp.StatusCode);
+
+        // Version 2: Create, put definition, mark-ready
+        var v2Resp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(2), accessToken);
+        var v2Id = await ReadGuidPropertyAsync(v2Resp, "instrumentVersionId");
+        await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{v2Id}/draft-definition", ValidPsychometricDraftPayload(), accessToken);
+        await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v2Id}/mark-ready", Json("{}"), accessToken);
+
+        // Attempting to publish Version 2 while Version 1 is still PUBLISHED must fail with 409
+        var pubV2Resp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v2Id}/publish", Json("{}"), accessToken);
+        await AssertProblemAsync(pubV2Resp, HttpStatusCode.Conflict, "Conflicto", "Debe retirar la versión publicada existente antes de publicar una nueva");
+
+        // Verify v2 remains READY and no PUBLISHED audit was recorded for v2
+        var v2Audits = await QueryAuditAsync(v2Id, "INSTRUMENT_VERSION_PUBLISHED");
+        Assert.Empty(v2Audits);
+
+        // Explicit retirement of Version 1 enables publishing Version 2
+        var retireV1Resp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v1Id}/retire", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, retireV1Resp.StatusCode);
+
+        var pubV2SuccessResp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v2Id}/publish", Json("{}"), accessToken);
+        Assert.Equal(HttpStatusCode.OK, pubV2SuccessResp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Publish_ConcurrentRequestsOnDifferentVersions_ShouldEnforceUniquePublishedConstraint()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c3_conc_pub")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var v1Resp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var v1Id = await ReadGuidPropertyAsync(v1Resp, "instrumentVersionId");
+        await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{v1Id}/draft-definition", ValidPsychometricDraftPayload(), accessToken);
+        await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v1Id}/mark-ready", Json("{}"), accessToken);
+
+        var v2Resp = await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(2), accessToken);
+        var v2Id = await ReadGuidPropertyAsync(v2Resp, "instrumentVersionId");
+        await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{v2Id}/draft-definition", ValidPsychometricDraftPayload(), accessToken);
+        await SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v2Id}/mark-ready", Json("{}"), accessToken);
+
+        var task1 = SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v1Id}/publish", Json("{}"), accessToken);
+        var task2 = SendJsonAsync(client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions/{v2Id}/publish", Json("{}"), accessToken);
+
+        var responses = await Task.WhenAll(task1, task2);
+        var statuses = responses.Select(r => r.StatusCode).ToList();
+
+        // Exactly one should succeed (200 OK) and the other should fail with 409 Conflict
+        Assert.Contains(HttpStatusCode.OK, statuses);
+        Assert.Contains(HttpStatusCode.Conflict, statuses);
+
+        // Verify only 1 version is PUBLISHED in the database
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var publishedCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.instrument_version WHERE instrument_id = @InstrumentId AND status = 'PUBLISHED'",
+            new { InstrumentId = instrumentId });
+        Assert.Equal(1, publishedCount);
     }
 
     // ------------------------------------------------------------------------------------------

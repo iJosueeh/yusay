@@ -1,7 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Yusay.Application.Assessment.Commands.CreateInstrument;
 using Yusay.Application.Assessment.Commands.CreateInstrumentVersion;
+using Yusay.Application.Assessment.Commands.MarkInstrumentVersionReady;
+using Yusay.Application.Assessment.Commands.PublishInstrumentVersion;
 using Yusay.Application.Assessment.Commands.ReplaceDraftDefinition;
+using Yusay.Application.Assessment.Commands.RetireInstrumentVersion;
+using Yusay.Application.Assessment.Commands.ReturnInstrumentVersionToDraft;
 using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
@@ -38,6 +42,10 @@ public static class DependencyInjection
         services.AddScoped<IUpdateInstrumentUseCase, UpdateInstrumentUseCase>();
         services.AddScoped<ICreateInstrumentVersionUseCase, CreateInstrumentVersionUseCase>();
         services.AddScoped<IReplaceDraftDefinitionUseCase, ReplaceDraftDefinitionUseCase>();
+        services.AddScoped<IMarkInstrumentVersionReadyUseCase, MarkInstrumentVersionReadyUseCase>();
+        services.AddScoped<IReturnInstrumentVersionToDraftUseCase, ReturnInstrumentVersionToDraftUseCase>();
+        services.AddScoped<IPublishInstrumentVersionUseCase, PublishInstrumentVersionUseCase>();
+        services.AddScoped<IRetireInstrumentVersionUseCase, RetireInstrumentVersionUseCase>();
         services.AddScoped<IListAdministrativeInstrumentsUseCase, ListAdministrativeInstrumentsUseCase>();
         services.AddScoped<IGetAdministrativeInstrumentByIdUseCase, GetAdministrativeInstrumentByIdUseCase>();
         services.AddScoped<IGetAdministrativeInstrumentVersionByIdUseCase, GetAdministrativeInstrumentVersionByIdUseCase>();

@@ -17,6 +17,7 @@ public sealed class InstrumentAdministrationRepository(IDbConnectionFactory conn
 {
     private const string DuplicateCodeConstraintName = "uq_instrument_code";
     private const string DuplicateVersionNumberConstraintName = "uq_instrument_version_instrument_id_version";
+    private const string SinglePublishedVersionConstraintName = "uxp_instrument_version_single_published";
 
     private readonly IDbConnectionFactory _connectionFactory = connectionFactory;
 
@@ -565,6 +566,42 @@ public sealed class InstrumentAdministrationRepository(IDbConnectionFactory conn
         }
     }
 
+    public async Task UpdateVersionStatusAsync(
+        Guid instrumentVersionId,
+        InstrumentVersionStatus status,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            UPDATE yusay.instrument_version
+            SET status = @Status
+            WHERE instrument_version_id = @InstrumentVersionId;
+            """;
+
+        var dbTx = (DbTransaction)transaction;
+        try
+        {
+            await dbTx.Connection!.ExecuteAsync(new CommandDefinition(
+                sql,
+                new
+                {
+                    InstrumentVersionId = instrumentVersionId,
+                    Status = status.ToDbValue()
+                },
+                dbTx,
+                cancellationToken: cancellationToken));
+        }
+        catch (PostgresException ex) when (
+            ex.SqlState == PostgresErrorCodes.UniqueViolation &&
+            string.Equals(ex.ConstraintName, SinglePublishedVersionConstraintName, StringComparison.Ordinal))
+        {
+            throw new ConflictException(IInstrumentAdministrationRepository.SinglePublishedVersionConflictMessage);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.CheckViolation)
+        {
+            throw new ConflictException(ex.MessageText);
+        }
+    }
 
     private static Instrument MapInstrument(InstrumentRow row) =>
         Instrument.Rehydrate(

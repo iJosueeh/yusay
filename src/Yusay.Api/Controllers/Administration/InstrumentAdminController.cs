@@ -5,7 +5,11 @@ using Yusay.Api.Common;
 using Yusay.Api.Contracts.Administration;
 using Yusay.Application.Assessment.Commands.CreateInstrument;
 using Yusay.Application.Assessment.Commands.CreateInstrumentVersion;
+using Yusay.Application.Assessment.Commands.MarkInstrumentVersionReady;
+using Yusay.Application.Assessment.Commands.PublishInstrumentVersion;
 using Yusay.Application.Assessment.Commands.ReplaceDraftDefinition;
+using Yusay.Application.Assessment.Commands.RetireInstrumentVersion;
+using Yusay.Application.Assessment.Commands.ReturnInstrumentVersionToDraft;
 using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
@@ -22,6 +26,10 @@ public sealed class InstrumentAdminController(
     IUpdateInstrumentUseCase updateInstrumentUseCase,
     ICreateInstrumentVersionUseCase createInstrumentVersionUseCase,
     IReplaceDraftDefinitionUseCase replaceDraftDefinitionUseCase,
+    IMarkInstrumentVersionReadyUseCase markInstrumentVersionReadyUseCase,
+    IReturnInstrumentVersionToDraftUseCase returnInstrumentVersionToDraftUseCase,
+    IPublishInstrumentVersionUseCase publishInstrumentVersionUseCase,
+    IRetireInstrumentVersionUseCase retireInstrumentVersionUseCase,
     IListAdministrativeInstrumentsUseCase listAdministrativeInstrumentsUseCase,
     IGetAdministrativeInstrumentByIdUseCase getAdministrativeInstrumentByIdUseCase,
     IGetAdministrativeInstrumentVersionByIdUseCase getAdministrativeInstrumentVersionByIdUseCase) : ControllerBase
@@ -30,6 +38,10 @@ public sealed class InstrumentAdminController(
     private readonly IUpdateInstrumentUseCase _updateInstrumentUseCase = updateInstrumentUseCase;
     private readonly ICreateInstrumentVersionUseCase _createInstrumentVersionUseCase = createInstrumentVersionUseCase;
     private readonly IReplaceDraftDefinitionUseCase _replaceDraftDefinitionUseCase = replaceDraftDefinitionUseCase;
+    private readonly IMarkInstrumentVersionReadyUseCase _markInstrumentVersionReadyUseCase = markInstrumentVersionReadyUseCase;
+    private readonly IReturnInstrumentVersionToDraftUseCase _returnInstrumentVersionToDraftUseCase = returnInstrumentVersionToDraftUseCase;
+    private readonly IPublishInstrumentVersionUseCase _publishInstrumentVersionUseCase = publishInstrumentVersionUseCase;
+    private readonly IRetireInstrumentVersionUseCase _retireInstrumentVersionUseCase = retireInstrumentVersionUseCase;
     private readonly IListAdministrativeInstrumentsUseCase _listAdministrativeInstrumentsUseCase =
         listAdministrativeInstrumentsUseCase;
     private readonly IGetAdministrativeInstrumentByIdUseCase _getAdministrativeInstrumentByIdUseCase =
@@ -192,6 +204,88 @@ public sealed class InstrumentAdminController(
                 references,
                 questions,
                 interpretations),
+            cancellationToken);
+
+        return Ok(InstrumentContractMapper.ToResponse(result));
+    }
+
+    [HttpPost("{instrumentId:guid}/versions/{versionId:guid}/mark-ready")]
+    [EndpointName("MarkInstrumentVersionReady")]
+    [ProducesResponseType(typeof(InstrumentVersionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<InstrumentVersionResponse>> MarkReady(
+        Guid instrumentId,
+        Guid versionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _markInstrumentVersionReadyUseCase.ExecuteAsync(
+            new MarkInstrumentVersionReadyCommand(instrumentId, versionId),
+            cancellationToken);
+
+        return Ok(InstrumentContractMapper.ToResponse(result));
+    }
+
+    [HttpPost("{instrumentId:guid}/versions/{versionId:guid}/return-to-draft")]
+    [EndpointName("ReturnInstrumentVersionToDraft")]
+    [ProducesResponseType(typeof(InstrumentVersionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<InstrumentVersionResponse>> ReturnToDraft(
+        Guid instrumentId,
+        Guid versionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _returnInstrumentVersionToDraftUseCase.ExecuteAsync(
+            new ReturnInstrumentVersionToDraftCommand(instrumentId, versionId),
+            cancellationToken);
+
+        return Ok(InstrumentContractMapper.ToResponse(result));
+    }
+
+    [HttpPost("{instrumentId:guid}/versions/{versionId:guid}/publish")]
+    [EndpointName("PublishInstrumentVersion")]
+    [ProducesResponseType(typeof(InstrumentVersionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<InstrumentVersionResponse>> Publish(
+        Guid instrumentId,
+        Guid versionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _publishInstrumentVersionUseCase.ExecuteAsync(
+            new PublishInstrumentVersionCommand(instrumentId, versionId),
+            cancellationToken);
+
+        return Ok(InstrumentContractMapper.ToResponse(result));
+    }
+
+    [HttpPost("{instrumentId:guid}/versions/{versionId:guid}/retire")]
+    [EndpointName("RetireInstrumentVersion")]
+    [ProducesResponseType(typeof(InstrumentVersionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<InstrumentVersionResponse>> Retire(
+        Guid instrumentId,
+        Guid versionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _retireInstrumentVersionUseCase.ExecuteAsync(
+            new RetireInstrumentVersionCommand(instrumentId, versionId),
             cancellationToken);
 
         return Ok(InstrumentContractMapper.ToResponse(result));

@@ -1,6 +1,7 @@
 using System.Data;
 using Yusay.Application.Assessment.Dtos;
 using Yusay.Domain.Assessment.Entities;
+using Yusay.Domain.Assessment.Enums;
 
 namespace Yusay.Application.Assessment.Repositories;
 
@@ -8,6 +9,7 @@ public interface IInstrumentAdministrationRepository
 {
     const string DuplicateCodeConflictMessage = "Ya existe un instrumento con el código especificado.";
     const string DuplicateVersionConflictMessage = "Ya existe una versión con el número especificado para este instrumento.";
+    const string SinglePublishedVersionConflictMessage = "Ya existe una versión publicada para este instrumento. Debe retirar la versión publicada existente antes de publicar una nueva.";
 
     Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default);
 
@@ -70,6 +72,12 @@ public interface IInstrumentAdministrationRepository
         IReadOnlyList<InstrumentVersionReference> references,
         IReadOnlyList<(Question Question, IReadOnlyList<(AnswerOption Option, int? Contribution)> Options)> questionsWithChildren,
         IReadOnlyList<Interpretation> interpretations,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateVersionStatusAsync(
+        Guid instrumentVersionId,
+        InstrumentVersionStatus status,
         IDbTransaction transaction,
         CancellationToken cancellationToken = default);
 }

@@ -250,4 +250,42 @@ public sealed class FakeInstrumentAdministrationRepository : IInstrumentAdminist
         DraftDefinitions[instrumentVersionId] = dto;
         return Task.CompletedTask;
     }
+
+    public Task UpdateVersionStatusAsync(
+        Guid instrumentVersionId,
+        InstrumentVersionStatus status,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        var idx = Versions.FindIndex(v => v.InstrumentVersionId == instrumentVersionId);
+        if (idx >= 0)
+        {
+            var old = Versions[idx];
+            var updated = InstrumentVersion.Rehydrate(
+                old.InstrumentVersionId,
+                old.InstrumentId,
+                old.Version,
+                status,
+                old.SourceDescription,
+                old.Population,
+                old.AdministrationConditions,
+                old.LicenseInformation,
+                old.Limitations);
+            Versions[idx] = updated;
+
+            if (DraftDefinitions.TryGetValue(instrumentVersionId, out var draft))
+            {
+                DraftDefinitions[instrumentVersionId] = new DraftDefinitionDto(
+                    draft.InstrumentVersionId,
+                    draft.InstrumentId,
+                    draft.Version,
+                    status.ToDbValue(),
+                    draft.References,
+                    draft.Questions,
+                    draft.Interpretations);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
 }

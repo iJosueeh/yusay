@@ -357,6 +357,114 @@ public sealed class AuditEvent
             metadata: metadata);
     }
 
+    public static AuditEvent CreateInstrumentVersionReady(
+        Guid instrumentVersionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "INSTRUMENT_VERSION_READY",
+            targetType: "INSTRUMENT_VERSION",
+            targetIdentifier: instrumentVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateInstrumentVersionReturnedToDraft(
+        Guid instrumentVersionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "INSTRUMENT_VERSION_RETURNED_TO_DRAFT",
+            targetType: "INSTRUMENT_VERSION",
+            targetIdentifier: instrumentVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateInstrumentVersionPublished(
+        Guid instrumentVersionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "INSTRUMENT_VERSION_PUBLISHED",
+            targetType: "INSTRUMENT_VERSION",
+            targetIdentifier: instrumentVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateInstrumentVersionRetired(
+        Guid instrumentVersionId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "INSTRUMENT_VERSION_RETIRED",
+            targetType: "INSTRUMENT_VERSION",
+            targetIdentifier: instrumentVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
     public static AuditEvent CreateCatalogCreated(
         Guid dimensionId,
         Guid administratorUserId,

@@ -134,4 +134,68 @@ public sealed class InstrumentVersion
             throw new DomainException("Las limitaciones psicométricas del instrumento no pueden estar vacías.");
         }
     }
+
+    public void MarkReady()
+    {
+        if (Status == InstrumentVersionStatus.Ready)
+        {
+            return;
+        }
+
+        if (Status != InstrumentVersionStatus.Draft)
+        {
+            throw new DomainException(
+                $"Transición de estado inválida: no se puede marcar como READY una versión en estado {Status}. Solo DRAFT puede pasar a READY.");
+        }
+
+        Status = InstrumentVersionStatus.Ready;
+    }
+
+    public void ReturnToDraft()
+    {
+        if (Status == InstrumentVersionStatus.Draft)
+        {
+            return;
+        }
+
+        if (Status != InstrumentVersionStatus.Ready)
+        {
+            throw new DomainException(
+                $"Transición de estado inválida: no se puede devolver a DRAFT una versión en estado {Status}. Solo READY puede volver a DRAFT.");
+        }
+
+        Status = InstrumentVersionStatus.Draft;
+    }
+
+    public void Publish()
+    {
+        if (Status == InstrumentVersionStatus.Published)
+        {
+            return;
+        }
+
+        if (Status != InstrumentVersionStatus.Ready)
+        {
+            throw new DomainException(
+                $"Transición de estado inválida: no se puede publicar una versión en estado {Status}. Solo READY puede pasar a PUBLISHED.");
+        }
+
+        Status = InstrumentVersionStatus.Published;
+    }
+
+    public void Retire()
+    {
+        if (Status == InstrumentVersionStatus.Retired)
+        {
+            return;
+        }
+
+        if (Status != InstrumentVersionStatus.Published)
+        {
+            throw new DomainException(
+                $"Transición de estado inválida: no se puede retirar una versión en estado {Status}. Solo PUBLISHED puede pasar a RETIRED.");
+        }
+
+        Status = InstrumentVersionStatus.Retired;
+    }
 }

@@ -259,6 +259,10 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/admin/instruments/{instrumentId}/versions",
                 "/admin/instruments/{instrumentId}/versions/{versionId}",
                 "/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+                "/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready",
+                "/admin/instruments/{instrumentId}/versions/{versionId}/publish",
+                "/admin/instruments/{instrumentId}/versions/{versionId}/retire",
+                "/admin/instruments/{instrumentId}/versions/{versionId}/return-to-draft",
                 "/auth/password-reset/confirm",
                 "/auth/password-reset/request", "/auth/register", "/auth/sign-in", "/auth/sign-out",
                 "/auth/verify-email", "/check-ins", "/check-ins/{checkInId}", "/dimensions",
@@ -295,7 +299,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("RetireDimensionVersion",
             ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/retirement", "post"));
 
-        // Catálogo de Instruments (C1 y C2 de RF-019 / RF-005)
+        // Catálogo de Instruments (C1, C2 y C3 de RF-019 / RF-005)
         Assert.Equal("ListAdministrativeInstruments", ReadOperationId(paths, "/admin/instruments", "get"));
         Assert.Equal("GetAdministrativeInstrumentById", ReadOperationId(paths, "/admin/instruments/{instrumentId}", "get"));
         Assert.Equal("CreateInstrument", ReadOperationId(paths, "/admin/instruments", "post"));
@@ -303,6 +307,10 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("CreateInstrumentVersion", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions", "post"));
         Assert.Equal("GetAdministrativeInstrumentVersionById", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}", "get"));
         Assert.Equal("ReplaceDraftDefinition", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", "put"));
+        Assert.Equal("MarkInstrumentVersionReady", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}/mark-ready", "post"));
+        Assert.Equal("ReturnInstrumentVersionToDraft", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}/return-to-draft", "post"));
+        Assert.Equal("PublishInstrumentVersion", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}/publish", "post"));
+        Assert.Equal("RetireInstrumentVersion", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}/retire", "post"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)
