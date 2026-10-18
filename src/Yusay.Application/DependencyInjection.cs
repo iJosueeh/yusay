@@ -84,6 +84,7 @@ public static class DependencyInjection
         services.AddScoped<IGetAssessmentAttemptUseCase, GetAssessmentAttemptUseCase>();
         services.AddScoped<ISubmitAssessmentAttemptUseCase, SubmitAssessmentAttemptUseCase>();
         services.AddScoped<IListAssessmentsUseCase, ListAssessmentsUseCase>();
+        services.AddScoped<Tracking.Queries.GetTimeline.IGetTimelineUseCase, Tracking.Queries.GetTimeline.GetTimelineUseCase>();
 
         return services;
     }

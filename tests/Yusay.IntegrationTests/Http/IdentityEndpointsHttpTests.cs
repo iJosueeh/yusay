@@ -271,7 +271,8 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/auth/verify-email", "/check-ins", "/check-ins/{checkInId}", "/dimensions",
                 "/dimensions/{dimensionId}", "/health",
                 "/instruments", "/instruments/{instrumentId}",
-                "/instruments/{instrumentId}/attempts"
+                "/instruments/{instrumentId}/attempts",
+                "/timeline"
             },
             routeNames);
 
@@ -323,6 +324,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("GetAssessmentAttempt", ReadOperationId(paths, "/assessments/{attemptId}", "get"));
         Assert.Equal("SaveAssessmentAnswers", ReadOperationId(paths, "/assessments/{attemptId}/answers", "put"));
         Assert.Equal("SubmitAssessmentAttempt", ReadOperationId(paths, "/assessments/{attemptId}/submit", "post"));
+        Assert.Equal("GetTimeline", ReadOperationId(paths, "/timeline", "get"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)
