@@ -309,3 +309,98 @@ public sealed class FakeInstrumentCatalogRepository : IInstrumentCatalogReposito
         return Task.FromResult(detail);
     }
 }
+
+public sealed class FakeAssessmentAttemptRepository : IAssessmentAttemptRepository
+{
+    public List<long> AcquiredLockKeys { get; } = new();
+    public Dictionary<Guid, PublishedVersionHeaderDto> PublishedVersions { get; } = new();
+    public List<AssessmentAttempt> Attempts { get; } = new();
+    public Dictionary<Guid, List<AttemptQuestionDto>> VersionQuestions { get; } = new();
+    public List<Guid> ExpiredAttempts { get; } = new();
+    public bool ThrowOnAddAttempt { get; set; }
+
+    public Task AcquireAttemptAdvisoryLockAsync(
+        long lockKey,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        AcquiredLockKeys.Add(lockKey);
+        return Task.CompletedTask;
+    }
+
+    public Task<PublishedVersionHeaderDto?> GetPublishedVersionForShareAsync(
+        Guid instrumentId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        PublishedVersions.TryGetValue(instrumentId, out var header);
+        return Task.FromResult(header);
+    }
+
+    public Task<ExistingAttemptHeaderDto?> GetActiveAttemptForUpdateAsync(
+        Guid userId,
+        Guid instrumentId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        var active = Attempts.FirstOrDefault(a =>
+            a.UserId == userId &&
+            a.InstrumentId == instrumentId &&
+            a.Status == AssessmentAttemptStatus.InProgress);
+
+        if (active is null)
+        {
+            return Task.FromResult<ExistingAttemptHeaderDto?>(null);
+        }
+
+        return Task.FromResult<ExistingAttemptHeaderDto?>(
+            new ExistingAttemptHeaderDto(active.AttemptId, active.StartedAt, active.ExpiresAt));
+    }
+
+    public Task ExpireAttemptAsync(
+        Guid attemptId,
+        DateTimeOffset endedAt,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        ExpiredAttempts.Add(attemptId);
+        var idx = Attempts.FindIndex(a => a.AttemptId == attemptId);
+        if (idx >= 0)
+        {
+            Attempts[idx].Expire(endedAt);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task AddAttemptAsync(
+        AssessmentAttempt attempt,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnAddAttempt)
+        {
+            throw new ConflictException(IAssessmentAttemptRepository.ActiveAttemptConflictMessage);
+        }
+
+        if (Attempts.Any(a => a.UserId == attempt.UserId && a.InstrumentId == attempt.InstrumentId && a.Status == AssessmentAttemptStatus.InProgress))
+        {
+            throw new ConflictException(IAssessmentAttemptRepository.ActiveAttemptConflictMessage);
+        }
+
+        Attempts.Add(attempt);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<AttemptQuestionDto>> GetAttemptQuestionsAsync(
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        if (VersionQuestions.TryGetValue(instrumentVersionId, out var questions))
+        {
+            return Task.FromResult<IReadOnlyList<AttemptQuestionDto>>(questions);
+        }
+
+        return Task.FromResult<IReadOnlyList<AttemptQuestionDto>>(Array.Empty<AttemptQuestionDto>());
+    }
+}

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Yusay.Api.Common;
 using Yusay.Api.Contracts.Assessment;
+using Yusay.Application.Assessment.Commands.StartAssessmentAttempt;
 using Yusay.Application.Assessment.Queries.GetPublishedInstrumentById;
 using Yusay.Application.Assessment.Queries.ListPublishedInstruments;
 
@@ -13,10 +14,12 @@ namespace Yusay.Api.Controllers.Assessment;
 [Tags("Yusay.Api")]
 public sealed class InstrumentController(
     IListPublishedInstrumentsUseCase listPublishedInstrumentsUseCase,
-    IGetPublishedInstrumentByIdUseCase getPublishedInstrumentByIdUseCase) : ControllerBase
+    IGetPublishedInstrumentByIdUseCase getPublishedInstrumentByIdUseCase,
+    IStartAssessmentAttemptUseCase startAssessmentAttemptUseCase) : ControllerBase
 {
     private readonly IListPublishedInstrumentsUseCase _listPublishedInstrumentsUseCase = listPublishedInstrumentsUseCase;
     private readonly IGetPublishedInstrumentByIdUseCase _getPublishedInstrumentByIdUseCase = getPublishedInstrumentByIdUseCase;
+    private readonly IStartAssessmentAttemptUseCase _startAssessmentAttemptUseCase = startAssessmentAttemptUseCase;
 
     [HttpGet]
     [EndpointName("ListPublishedInstruments")]
@@ -41,5 +44,24 @@ public sealed class InstrumentController(
     {
         var result = await _getPublishedInstrumentByIdUseCase.ExecuteAsync(instrumentId, cancellationToken);
         return Ok(PublishedInstrumentContractMapper.ToDetailsResponse(result));
+    }
+
+    [HttpPost("{instrumentId:guid}/attempts")]
+    [EndpointName("StartAssessmentAttempt")]
+    [ProducesResponseType(typeof(StartAssessmentAttemptResponse), StatusCodes.Status201Created, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<StartAssessmentAttemptResponse>> StartAttempt(
+        Guid instrumentId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _startAssessmentAttemptUseCase.ExecuteAsync(
+            new StartAssessmentAttemptCommand(instrumentId),
+            cancellationToken);
+
+        var response = AssessmentAttemptContractMapper.ToResponse(result);
+        return Created($"/assessments/{response.AttemptId}", response);
     }
 }

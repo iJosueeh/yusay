@@ -267,7 +267,8 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/auth/password-reset/request", "/auth/register", "/auth/sign-in", "/auth/sign-out",
                 "/auth/verify-email", "/check-ins", "/check-ins/{checkInId}", "/dimensions",
                 "/dimensions/{dimensionId}", "/health",
-                "/instruments", "/instruments/{instrumentId}"
+                "/instruments", "/instruments/{instrumentId}",
+                "/instruments/{instrumentId}/attempts"
             },
             routeNames);
 
@@ -300,7 +301,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("RetireDimensionVersion",
             ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/retirement", "post"));
 
-        // Catálogo de Instruments (C1, C2 y C3 de RF-019 / RF-005)
+        // Catálogo de Instruments (C1, C2 y C3 de RF-019 / RF-005) y Evaluación (RF-006)
         Assert.Equal("ListAdministrativeInstruments", ReadOperationId(paths, "/admin/instruments", "get"));
         Assert.Equal("GetAdministrativeInstrumentById", ReadOperationId(paths, "/admin/instruments/{instrumentId}", "get"));
         Assert.Equal("CreateInstrument", ReadOperationId(paths, "/admin/instruments", "post"));
@@ -314,6 +315,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("RetireInstrumentVersion", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}/retire", "post"));
         Assert.Equal("ListPublishedInstruments", ReadOperationId(paths, "/instruments", "get"));
         Assert.Equal("GetPublishedInstrumentById", ReadOperationId(paths, "/instruments/{instrumentId}", "get"));
+        Assert.Equal("StartAssessmentAttempt", ReadOperationId(paths, "/instruments/{instrumentId}/attempts", "post"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)

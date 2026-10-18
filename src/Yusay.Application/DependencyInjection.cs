@@ -6,6 +6,7 @@ using Yusay.Application.Assessment.Commands.PublishInstrumentVersion;
 using Yusay.Application.Assessment.Commands.ReplaceDraftDefinition;
 using Yusay.Application.Assessment.Commands.RetireInstrumentVersion;
 using Yusay.Application.Assessment.Commands.ReturnInstrumentVersionToDraft;
+using Yusay.Application.Assessment.Commands.StartAssessmentAttempt;
 using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
@@ -74,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<IRetireDimensionVersionUseCase, RetireDimensionVersionUseCase>();
         services.AddScoped<IListPublishedInstrumentsUseCase, ListPublishedInstrumentsUseCase>();
         services.AddScoped<IGetPublishedInstrumentByIdUseCase, GetPublishedInstrumentByIdUseCase>();
+        services.AddScoped<IStartAssessmentAttemptUseCase, StartAssessmentAttemptUseCase>();
 
         return services;
     }
