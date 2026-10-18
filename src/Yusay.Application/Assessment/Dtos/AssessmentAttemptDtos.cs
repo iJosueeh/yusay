@@ -30,3 +30,40 @@ public sealed record ExistingAttemptHeaderDto(
     Guid AttemptId,
     DateTimeOffset StartedAt,
     DateTimeOffset ExpiresAt);
+
+public sealed record AssessmentAnswerItemDto(
+    Guid QuestionId,
+    Guid OptionId);
+
+public sealed record SaveAssessmentAnswersResult(
+    Guid AttemptId,
+    int SavedCount);
+
+public sealed record AttemptQuestionProgressDto(
+    Guid QuestionId,
+    int Position,
+    string Prompt,
+    bool Required,
+    Guid? SelectedOptionId,
+    IReadOnlyList<AttemptOptionDto> Options);
+
+public sealed record AssessmentAttemptProgressResult(
+    Guid AttemptId,
+    Guid InstrumentId,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset ExpiresAt,
+    IReadOnlyList<AttemptQuestionProgressDto> Questions);
+
+public sealed record AttemptDetailsHeaderDto(
+    Guid AttemptId,
+    Guid UserId,
+    Guid InstrumentId,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? EndedAt);

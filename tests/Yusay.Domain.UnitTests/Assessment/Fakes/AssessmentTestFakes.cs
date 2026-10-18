@@ -364,6 +364,7 @@ public sealed class FakeAssessmentAttemptRepository : IAssessmentAttemptReposito
         CancellationToken cancellationToken = default)
     {
         ExpiredAttempts.Add(attemptId);
+        SavedAnswers.Remove(attemptId);
         var idx = Attempts.FindIndex(a => a.AttemptId == attemptId);
         if (idx >= 0)
         {
@@ -402,5 +403,119 @@ public sealed class FakeAssessmentAttemptRepository : IAssessmentAttemptReposito
         }
 
         return Task.FromResult<IReadOnlyList<AttemptQuestionDto>>(Array.Empty<AttemptQuestionDto>());
+    }
+
+    public Dictionary<Guid, Dictionary<Guid, Guid>> SavedAnswers { get; } = new();
+    public Dictionary<Guid, Dictionary<Guid, HashSet<Guid>>> VersionAllowedOptions { get; } = new();
+    public Dictionary<Guid, int> VersionNumbers { get; } = new();
+
+    public Task<AttemptDetailsHeaderDto?> GetAttemptHeaderForUpdateAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        return GetAttemptHeaderAsync(attemptId, userId, cancellationToken);
+    }
+
+    public Task<AttemptDetailsHeaderDto?> GetAttemptHeaderAsync(
+        Guid attemptId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var attempt = Attempts.FirstOrDefault(a => a.AttemptId == attemptId && a.UserId == userId);
+        if (attempt is null)
+        {
+            return Task.FromResult<AttemptDetailsHeaderDto?>(null);
+        }
+
+        var version = VersionNumbers.TryGetValue(attempt.InstrumentVersionId, out var ver) ? ver : 1;
+        return Task.FromResult<AttemptDetailsHeaderDto?>(new AttemptDetailsHeaderDto(
+            attempt.AttemptId,
+            attempt.UserId,
+            attempt.InstrumentId,
+            attempt.InstrumentVersionId,
+            version,
+            attempt.Status.ToDbValue(),
+            attempt.StartedAt,
+            attempt.ExpiresAt,
+            attempt.EndedAt));
+    }
+
+    public Task<IReadOnlyDictionary<Guid, HashSet<Guid>>> GetValidQuestionsAndOptionsAsync(
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        if (VersionAllowedOptions.TryGetValue(instrumentVersionId, out var dict))
+        {
+            return Task.FromResult<IReadOnlyDictionary<Guid, HashSet<Guid>>>(dict);
+        }
+
+        return Task.FromResult<IReadOnlyDictionary<Guid, HashSet<Guid>>>(
+            new Dictionary<Guid, HashSet<Guid>>());
+    }
+
+    public Task SaveAnswersAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        IReadOnlyList<AssessmentAnswerItemDto> answers,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        if (!SavedAnswers.TryGetValue(attemptId, out var attemptAnswers))
+        {
+            attemptAnswers = new Dictionary<Guid, Guid>();
+            SavedAnswers[attemptId] = attemptAnswers;
+        }
+
+        foreach (var a in answers)
+        {
+            attemptAnswers[a.QuestionId] = a.OptionId;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<AttemptQuestionProgressDto>> GetAttemptProgressQuestionsAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        SavedAnswers.TryGetValue(attemptId, out var attemptAnswers);
+
+        if (!VersionQuestions.TryGetValue(instrumentVersionId, out var questions))
+        {
+            return Task.FromResult<IReadOnlyList<AttemptQuestionProgressDto>>(
+                Array.Empty<AttemptQuestionProgressDto>());
+        }
+
+        var progressList = questions.Select(q =>
+        {
+            Guid? selectedOptionId = null;
+            if (attemptAnswers is not null && attemptAnswers.TryGetValue(q.QuestionId, out var optId))
+            {
+                selectedOptionId = optId;
+            }
+
+            return new AttemptQuestionProgressDto(
+                q.QuestionId,
+                q.Position,
+                q.Prompt,
+                q.Required,
+                selectedOptionId,
+                q.Options);
+        }).ToList();
+
+        return Task.FromResult<IReadOnlyList<AttemptQuestionProgressDto>>(progressList);
+    }
+
+    public Task ExpireAttemptCommittedAsync(
+        Guid attemptId,
+        DateTimeOffset endedAt,
+        CancellationToken cancellationToken = default)
+    {
+        return ExpireAttemptAsync(attemptId, endedAt, null!, cancellationToken);
     }
 }

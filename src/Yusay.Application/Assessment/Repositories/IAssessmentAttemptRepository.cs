@@ -39,4 +39,38 @@ public interface IAssessmentAttemptRepository
         Guid instrumentVersionId,
         IDbTransaction transaction,
         CancellationToken cancellationToken = default);
+
+    Task<AttemptDetailsHeaderDto?> GetAttemptHeaderForUpdateAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task<AttemptDetailsHeaderDto?> GetAttemptHeaderAsync(
+        Guid attemptId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, HashSet<Guid>>> GetValidQuestionsAndOptionsAsync(
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task SaveAnswersAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        IReadOnlyList<AssessmentAnswerItemDto> answers,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AttemptQuestionProgressDto>> GetAttemptProgressQuestionsAsync(
+        Guid attemptId,
+        Guid instrumentVersionId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
+
+    Task ExpireAttemptCommittedAsync(
+        Guid attemptId,
+        DateTimeOffset endedAt,
+        CancellationToken cancellationToken = default);
 }

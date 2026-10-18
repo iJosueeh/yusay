@@ -21,3 +21,32 @@ public sealed record StartAssessmentAttemptResponse(
     DateTimeOffset StartedAt,
     DateTimeOffset ExpiresAt,
     IReadOnlyList<AttemptQuestionResponse> Questions);
+
+public sealed record AssessmentAnswerItemRequest(
+    Guid QuestionId,
+    Guid OptionId);
+
+public sealed record SaveAssessmentAnswersRequest(
+    IReadOnlyList<AssessmentAnswerItemRequest> Answers);
+
+public sealed record SaveAssessmentAnswersResponse(
+    Guid AttemptId,
+    int SavedCount);
+
+public sealed record AttemptQuestionProgressResponse(
+    Guid QuestionId,
+    int Position,
+    string Prompt,
+    bool Required,
+    Guid? SelectedOptionId,
+    IReadOnlyList<AttemptOptionResponse> Options);
+
+public sealed record AssessmentAttemptProgressResponse(
+    Guid AttemptId,
+    Guid InstrumentId,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset ExpiresAt,
+    IReadOnlyList<AttemptQuestionProgressResponse> Questions);
