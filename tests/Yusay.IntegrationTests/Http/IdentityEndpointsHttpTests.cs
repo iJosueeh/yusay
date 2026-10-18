@@ -263,6 +263,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/admin/instruments/{instrumentId}/versions/{versionId}/publish",
                 "/admin/instruments/{instrumentId}/versions/{versionId}/retire",
                 "/admin/instruments/{instrumentId}/versions/{versionId}/return-to-draft",
+                "/assessments",
                 "/assessments/{attemptId}", "/assessments/{attemptId}/answers",
                 "/assessments/{attemptId}/submit",
                 "/auth/password-reset/confirm",
@@ -318,6 +319,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("ListPublishedInstruments", ReadOperationId(paths, "/instruments", "get"));
         Assert.Equal("GetPublishedInstrumentById", ReadOperationId(paths, "/instruments/{instrumentId}", "get"));
         Assert.Equal("StartAssessmentAttempt", ReadOperationId(paths, "/instruments/{instrumentId}/attempts", "post"));
+        Assert.Equal("ListAssessments", ReadOperationId(paths, "/assessments", "get"));
         Assert.Equal("GetAssessmentAttempt", ReadOperationId(paths, "/assessments/{attemptId}", "get"));
         Assert.Equal("SaveAssessmentAnswers", ReadOperationId(paths, "/assessments/{attemptId}/answers", "put"));
         Assert.Equal("SubmitAssessmentAttempt", ReadOperationId(paths, "/assessments/{attemptId}/submit", "post"));

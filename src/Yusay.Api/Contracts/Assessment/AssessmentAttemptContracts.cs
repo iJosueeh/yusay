@@ -41,6 +41,11 @@ public sealed record AttemptQuestionProgressResponse(
     Guid? SelectedOptionId,
     IReadOnlyList<AttemptOptionResponse> Options);
 
+public sealed record AssessmentResultDetailsResponse(
+    int Score,
+    AssessmentInterpretationResponse Interpretation,
+    DateTimeOffset CalculatedAt);
+
 public sealed record AssessmentAttemptProgressResponse(
     Guid AttemptId,
     Guid InstrumentId,
@@ -49,7 +54,29 @@ public sealed record AssessmentAttemptProgressResponse(
     string Status,
     DateTimeOffset StartedAt,
     DateTimeOffset ExpiresAt,
-    IReadOnlyList<AttemptQuestionProgressResponse> Questions);
+    IReadOnlyList<AttemptQuestionProgressResponse> Questions,
+    AssessmentResultDetailsResponse? Result = null);
+
+public sealed record AssessmentResultSummaryResponse(
+    int Score,
+    string InterpretationLabel);
+
+public sealed record AssessmentListItemResponse(
+    Guid AttemptId,
+    Guid InstrumentId,
+    string InstrumentCode,
+    string InstrumentName,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt,
+    DateTimeOffset ExpiresAt,
+    AssessmentResultSummaryResponse? Result);
+
+public sealed record ListAssessmentsResponse(
+    IReadOnlyList<AssessmentListItemResponse> Items,
+    string? NextCursor);
 
 public sealed record AssessmentInterpretationResponse(
     Guid InterpretationId,

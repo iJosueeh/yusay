@@ -47,6 +47,11 @@ public sealed record AttemptQuestionProgressDto(
     Guid? SelectedOptionId,
     IReadOnlyList<AttemptOptionDto> Options);
 
+public sealed record AssessmentResultDetailDto(
+    int Score,
+    AssessmentInterpretationResultDto Interpretation,
+    DateTimeOffset CalculatedAt);
+
 public sealed record AssessmentAttemptProgressResult(
     Guid AttemptId,
     Guid InstrumentId,
@@ -55,7 +60,43 @@ public sealed record AssessmentAttemptProgressResult(
     string Status,
     DateTimeOffset StartedAt,
     DateTimeOffset ExpiresAt,
-    IReadOnlyList<AttemptQuestionProgressDto> Questions);
+    IReadOnlyList<AttemptQuestionProgressDto> Questions,
+    AssessmentResultDetailDto? Result = null);
+
+public sealed record AssessmentResultSummaryDto(
+    int Score,
+    string InterpretationLabel);
+
+public sealed record AssessmentListItemDto(
+    Guid AttemptId,
+    Guid InstrumentId,
+    string InstrumentCode,
+    string InstrumentName,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt,
+    DateTimeOffset ExpiresAt,
+    AssessmentResultSummaryDto? Result);
+
+public sealed record ListAssessmentsResult(
+    IReadOnlyList<AssessmentListItemDto> Items,
+    string? NextCursor);
+
+public sealed record AssessmentAttemptListItemRowDto(
+    Guid AttemptId,
+    Guid InstrumentId,
+    string InstrumentCode,
+    string InstrumentName,
+    Guid InstrumentVersionId,
+    int Version,
+    string Status,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt,
+    DateTimeOffset ExpiresAt,
+    int? Score,
+    string? InterpretationLabel);
 
 public sealed record AttemptDetailsHeaderDto(
     Guid AttemptId,

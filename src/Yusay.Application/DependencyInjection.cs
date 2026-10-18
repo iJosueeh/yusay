@@ -15,6 +15,7 @@ using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionByI
 using Yusay.Application.Assessment.Queries.GetAssessmentAttempt;
 using Yusay.Application.Assessment.Queries.GetPublishedInstrumentById;
 using Yusay.Application.Assessment.Queries.ListAdministrativeInstruments;
+using Yusay.Application.Assessment.Queries.ListAssessments;
 using Yusay.Application.Assessment.Queries.ListPublishedInstruments;
 using Yusay.Application.Identity.Commands.RegisterUser;
 using Yusay.Application.Identity.Commands.RequestPasswordReset;
@@ -82,6 +83,7 @@ public static class DependencyInjection
         services.AddScoped<ISaveAssessmentAnswersUseCase, SaveAssessmentAnswersUseCase>();
         services.AddScoped<IGetAssessmentAttemptUseCase, GetAssessmentAttemptUseCase>();
         services.AddScoped<ISubmitAssessmentAttemptUseCase, SubmitAssessmentAttemptUseCase>();
+        services.AddScoped<IListAssessmentsUseCase, ListAssessmentsUseCase>();
 
         return services;
     }

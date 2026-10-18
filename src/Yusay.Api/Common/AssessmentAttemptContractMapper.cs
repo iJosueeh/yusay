@@ -42,7 +42,37 @@ public static class AssessmentAttemptContractMapper
                 q.Options.Select(o => new AttemptOptionResponse(
                     o.OptionId,
                     o.Position,
-                    o.Label)).ToList())).ToList());
+                    o.Label)).ToList())).ToList(),
+            result.Result is null
+                ? null
+                : new AssessmentResultDetailsResponse(
+                    result.Result.Score,
+                    new AssessmentInterpretationResponse(
+                        result.Result.Interpretation.InterpretationId,
+                        result.Result.Interpretation.Label,
+                        result.Result.Interpretation.Description,
+                        result.Result.Interpretation.Limitations),
+                    result.Result.CalculatedAt));
+
+    public static ListAssessmentsResponse ToResponse(ListAssessmentsResult result) =>
+        new(
+            result.Items.Select(item => new AssessmentListItemResponse(
+                item.AttemptId,
+                item.InstrumentId,
+                item.InstrumentCode,
+                item.InstrumentName,
+                item.InstrumentVersionId,
+                item.Version,
+                item.Status,
+                item.StartedAt,
+                item.EndedAt,
+                item.ExpiresAt,
+                item.Result is null
+                    ? null
+                    : new AssessmentResultSummaryResponse(
+                        item.Result.Score,
+                        item.Result.InterpretationLabel))).ToList(),
+            result.NextCursor);
 
     public static SaveAssessmentAnswersResponse ToResponse(SaveAssessmentAnswersResult result) =>
         new(result.AttemptId, result.SavedCount);

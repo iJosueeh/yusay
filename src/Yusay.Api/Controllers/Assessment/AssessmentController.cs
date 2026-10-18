@@ -5,6 +5,7 @@ using Yusay.Api.Contracts.Assessment;
 using Yusay.Application.Assessment.Commands.SaveAssessmentAnswers;
 using Yusay.Application.Assessment.Commands.SubmitAssessmentAttempt;
 using Yusay.Application.Assessment.Queries.GetAssessmentAttempt;
+using Yusay.Application.Assessment.Queries.ListAssessments;
 
 namespace Yusay.Api.Controllers.Assessment;
 
@@ -13,13 +14,33 @@ namespace Yusay.Api.Controllers.Assessment;
 [Authorize]
 [Tags("Yusay.Api")]
 public sealed class AssessmentController(
+    IListAssessmentsUseCase listAssessmentsUseCase,
     IGetAssessmentAttemptUseCase getAssessmentAttemptUseCase,
     ISaveAssessmentAnswersUseCase saveAssessmentAnswersUseCase,
     ISubmitAssessmentAttemptUseCase submitAssessmentAttemptUseCase) : ControllerBase
 {
+    private readonly IListAssessmentsUseCase _listAssessmentsUseCase = listAssessmentsUseCase;
     private readonly IGetAssessmentAttemptUseCase _getAssessmentAttemptUseCase = getAssessmentAttemptUseCase;
     private readonly ISaveAssessmentAnswersUseCase _saveAssessmentAnswersUseCase = saveAssessmentAnswersUseCase;
     private readonly ISubmitAssessmentAttemptUseCase _submitAssessmentAttemptUseCase = submitAssessmentAttemptUseCase;
+
+    [HttpGet]
+    [EndpointName("ListAssessments")]
+    [ProducesResponseType(typeof(ListAssessmentsResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<ListAssessmentsResponse>> List(
+        int? limit,
+        string? cursor,
+        CancellationToken cancellationToken)
+    {
+        var result = await _listAssessmentsUseCase.ExecuteAsync(
+            new ListAssessmentsQuery(limit, cursor),
+            cancellationToken);
+
+        return Ok(AssessmentAttemptContractMapper.ToResponse(result));
+    }
 
     [HttpGet("{attemptId:guid}")]
     [EndpointName("GetAssessmentAttempt")]

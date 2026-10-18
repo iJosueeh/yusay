@@ -408,6 +408,8 @@ public sealed class FakeAssessmentAttemptRepository : IAssessmentAttemptReposito
     public Dictionary<Guid, Dictionary<Guid, Guid>> SavedAnswers { get; } = new();
     public Dictionary<Guid, Dictionary<Guid, HashSet<Guid>>> VersionAllowedOptions { get; } = new();
     public Dictionary<Guid, int> VersionNumbers { get; } = new();
+    public Dictionary<Guid, string> VersionInstrumentCode { get; } = new();
+    public Dictionary<Guid, string> VersionInstrumentName { get; } = new();
 
     public Task<AttemptDetailsHeaderDto?> GetAttemptHeaderForUpdateAsync(
         Guid attemptId,
@@ -605,5 +607,94 @@ public sealed class FakeAssessmentAttemptRepository : IAssessmentAttemptReposito
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<AssessmentAttemptListItemRowDto>> ListUserAttemptsAsync(
+        Guid userId,
+        int limit,
+        DateTimeOffset? cursorStartedAt,
+        Guid? cursorAttemptId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = Attempts.Where(a => a.UserId == userId);
+
+        if (cursorStartedAt.HasValue && cursorAttemptId.HasValue)
+        {
+            query = query.Where(a => a.StartedAt < cursorStartedAt.Value ||
+                (a.StartedAt == cursorStartedAt.Value && a.AttemptId.CompareTo(cursorAttemptId.Value) < 0));
+        }
+
+        var rows = query
+            .OrderByDescending(a => a.StartedAt)
+            .ThenByDescending(a => a.AttemptId)
+            .Take(limit)
+            .Select(a =>
+            {
+                var code = VersionInstrumentCode.TryGetValue(a.InstrumentVersionId, out var c) ? c : "CODE";
+                var name = VersionInstrumentName.TryGetValue(a.InstrumentVersionId, out var n) ? n : "Name";
+                var version = VersionNumbers.TryGetValue(a.InstrumentVersionId, out var v) ? v : 1;
+
+                int? score = null;
+                string? interpretationLabel = null;
+                if (AttemptResults.TryGetValue(a.AttemptId, out var res))
+                {
+                    score = res.Score;
+                    IReadOnlyList<InterpretationDataDto> interps = VersionInterpretations.TryGetValue(a.InstrumentVersionId, out var iList)
+                        ? iList
+                        : Array.Empty<InterpretationDataDto>();
+                    var foundInterp = interps.FirstOrDefault(x => x.InterpretationId == res.InterpretationId);
+                    interpretationLabel = foundInterp?.Label ?? "Label";
+                }
+
+                return new AssessmentAttemptListItemRowDto(
+                    a.AttemptId,
+                    a.InstrumentId,
+                    code,
+                    name,
+                    a.InstrumentVersionId,
+                    version,
+                    a.Status.ToDbValue(),
+                    a.StartedAt,
+                    a.EndedAt,
+                    a.ExpiresAt,
+                    score,
+                    interpretationLabel);
+            })
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<AssessmentAttemptListItemRowDto>>(rows);
+    }
+
+    public Task<AssessmentResultDetailDto?> GetOfficialResultDetailAsync(
+        Guid attemptId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var attempt = Attempts.FirstOrDefault(a => a.AttemptId == attemptId && a.UserId == userId);
+        if (attempt is null || !AttemptResults.TryGetValue(attemptId, out var res))
+        {
+            return Task.FromResult<AssessmentResultDetailDto?>(null);
+        }
+
+        IReadOnlyList<InterpretationDataDto> interps = VersionInterpretations.TryGetValue(attempt.InstrumentVersionId, out var i)
+            ? i
+            : Array.Empty<InterpretationDataDto>();
+        var foundInterp = interps.FirstOrDefault(x => x.InterpretationId == res.InterpretationId);
+        var interpDto = foundInterp is not null
+            ? new AssessmentInterpretationResultDto(
+                foundInterp.InterpretationId,
+                foundInterp.Label,
+                foundInterp.Description,
+                foundInterp.Limitations)
+            : new AssessmentInterpretationResultDto(
+                res.InterpretationId,
+                "Unknown",
+                "No description",
+                null);
+
+        return Task.FromResult<AssessmentResultDetailDto?>(new AssessmentResultDetailDto(
+            res.Score,
+            interpDto,
+            res.CalculatedAt));
     }
 }

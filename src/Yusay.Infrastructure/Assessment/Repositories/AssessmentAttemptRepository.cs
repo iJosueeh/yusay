@@ -630,6 +630,116 @@ public sealed class AssessmentAttemptRepository(IDbConnectionFactory connectionF
             cancellationToken: cancellationToken));
     }
 
+    public async Task<IReadOnlyList<AssessmentAttemptListItemRowDto>> ListUserAttemptsAsync(
+        Guid userId,
+        int limit,
+        DateTimeOffset? cursorStartedAt,
+        Guid? cursorAttemptId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+                a.attempt_id AS AttemptId,
+                a.instrument_id AS InstrumentId,
+                i.code AS InstrumentCode,
+                i.name AS InstrumentName,
+                a.instrument_version_id AS InstrumentVersionId,
+                v.version AS Version,
+                a.status AS Status,
+                a.started_at AS StartedAt,
+                a.ended_at AS EndedAt,
+                a.expires_at AS ExpiresAt,
+                r.score AS Score,
+                it.label AS InterpretationLabel
+            FROM yusay.assessment_attempt a
+            JOIN yusay.instrument i
+                ON i.instrument_id = a.instrument_id
+            JOIN yusay.instrument_version v
+                ON v.instrument_id = a.instrument_id AND v.instrument_version_id = a.instrument_version_id
+            LEFT JOIN yusay.assessment_result r
+                ON r.attempt_id = a.attempt_id
+            LEFT JOIN yusay.interpretation it
+                ON it.instrument_version_id = a.instrument_version_id AND it.interpretation_id = r.interpretation_id
+            WHERE a.user_id = @UserId
+              AND (
+                @HasCursor = false
+                OR (a.started_at < @CursorStartedAt::timestamptz
+                    OR (a.started_at = @CursorStartedAt::timestamptz AND a.attempt_id < @CursorAttemptId::uuid))
+              )
+            ORDER BY a.started_at DESC, a.attempt_id DESC
+            LIMIT @Limit;
+            """;
+
+        await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var rows = await connection.QueryAsync<AssessmentAttemptListItemRow>(new CommandDefinition(
+            sql,
+            new
+            {
+                UserId = userId,
+                HasCursor = cursorStartedAt.HasValue && cursorAttemptId.HasValue,
+                CursorStartedAt = cursorStartedAt,
+                CursorAttemptId = cursorAttemptId,
+                Limit = limit
+            },
+            cancellationToken: cancellationToken));
+
+        return rows.Select(r => new AssessmentAttemptListItemRowDto(
+            r.AttemptId,
+            r.InstrumentId,
+            r.InstrumentCode,
+            r.InstrumentName,
+            r.InstrumentVersionId,
+            r.Version,
+            r.Status,
+            r.StartedAt,
+            r.EndedAt,
+            r.ExpiresAt,
+            r.Score,
+            r.InterpretationLabel)).ToList();
+    }
+
+    public async Task<AssessmentResultDetailDto?> GetOfficialResultDetailAsync(
+        Guid attemptId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+                r.score AS Score,
+                i.interpretation_id AS InterpretationId,
+                i.label AS InterpretationLabel,
+                i.description AS InterpretationDescription,
+                i.limitations AS InterpretationLimitations,
+                r.calculated_at AS CalculatedAt
+            FROM yusay.assessment_result r
+            JOIN yusay.assessment_attempt a
+                ON a.attempt_id = r.attempt_id
+            JOIN yusay.interpretation i
+                ON i.instrument_version_id = a.instrument_version_id AND i.interpretation_id = r.interpretation_id
+            WHERE r.attempt_id = @AttemptId AND a.user_id = @UserId;
+            """;
+
+        await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var row = await connection.QuerySingleOrDefaultAsync<OfficialResultDetailRow>(new CommandDefinition(
+            sql,
+            new { AttemptId = attemptId, UserId = userId },
+            cancellationToken: cancellationToken));
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        return new AssessmentResultDetailDto(
+            row.Score,
+            new AssessmentInterpretationResultDto(
+                row.InterpretationId,
+                row.InterpretationLabel,
+                row.InterpretationDescription,
+                row.InterpretationLimitations),
+            row.CalculatedAt);
+    }
+
     private static SubmitAssessmentAttemptResult MapOfficialResult(OfficialResultRow r) =>
         new(
             r.AttemptId,
@@ -732,5 +842,31 @@ public sealed class AssessmentAttemptRepository(IDbConnectionFactory connectionF
         public string? Limitations { get; init; }
         public int LowerBound { get; init; }
         public int UpperBound { get; init; }
+    }
+
+    private sealed class OfficialResultDetailRow
+    {
+        public int Score { get; init; }
+        public Guid InterpretationId { get; init; }
+        public string InterpretationLabel { get; init; } = string.Empty;
+        public string InterpretationDescription { get; init; } = string.Empty;
+        public string? InterpretationLimitations { get; init; }
+        public DateTimeOffset CalculatedAt { get; init; }
+    }
+
+    private sealed class AssessmentAttemptListItemRow
+    {
+        public Guid AttemptId { get; init; }
+        public Guid InstrumentId { get; init; }
+        public string InstrumentCode { get; init; } = string.Empty;
+        public string InstrumentName { get; init; } = string.Empty;
+        public Guid InstrumentVersionId { get; init; }
+        public int Version { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public DateTimeOffset StartedAt { get; init; }
+        public DateTimeOffset? EndedAt { get; init; }
+        public DateTimeOffset ExpiresAt { get; init; }
+        public int? Score { get; init; }
+        public string? InterpretationLabel { get; init; }
     }
 }

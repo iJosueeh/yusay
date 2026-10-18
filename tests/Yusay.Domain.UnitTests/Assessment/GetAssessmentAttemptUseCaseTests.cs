@@ -138,5 +138,56 @@ public sealed class GetAssessmentAttemptUseCaseTests
         // Respuestas borradas por la expiración
         Assert.Single(result.Questions);
         Assert.Null(result.Questions[0].SelectedOptionId);
+        Assert.Null(result.Result);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenAttemptSubmitted_ReturnsQuestionsAndOfficialResult()
+    {
+        var userId = Guid.NewGuid();
+        var instrumentId = Guid.NewGuid();
+        var versionId = Guid.NewGuid();
+        _currentUser.UserId = userId;
+
+        var startedAt = _timeProvider.GetUtcNow().AddHours(-2);
+        var submittedAt = startedAt.AddMinutes(20);
+        var attempt = AssessmentAttempt.Create(userId, instrumentId, versionId, startedAt);
+        _attemptRepository.Attempts.Add(attempt);
+        _attemptRepository.VersionNumbers[versionId] = 1;
+
+        var interpId = Guid.NewGuid();
+        _attemptRepository.VersionInterpretations[versionId] = new List<InterpretationDataDto>
+        {
+            new(interpId, "Moderada", "Síntomas moderados", "Sin valor diagnóstico", 10, 14)
+        };
+        _attemptRepository.AttemptResults[attempt.AttemptId] = (12, interpId, submittedAt);
+        attempt.Submit(submittedAt);
+
+        var q1 = Guid.NewGuid();
+        var opt1 = Guid.NewGuid();
+        _attemptRepository.VersionQuestions[versionId] = new List<AttemptQuestionDto>
+        {
+            new(q1, 1, "Pregunta 1", true, new List<AttemptOptionDto> { new(opt1, 1, "Opción 1") })
+        };
+        _attemptRepository.SavedAnswers[attempt.AttemptId] = new Dictionary<Guid, Guid>
+        {
+            [q1] = opt1
+        };
+
+        var useCase = CreateUseCase();
+        var result = await useCase.ExecuteAsync(new GetAssessmentAttemptQuery(attempt.AttemptId));
+
+        Assert.NotNull(result);
+        Assert.Equal("SUBMITTED", result.Status);
+        Assert.Single(result.Questions);
+        Assert.Equal(opt1, result.Questions[0].SelectedOptionId);
+
+        Assert.NotNull(result.Result);
+        Assert.Equal(12, result.Result.Score);
+        Assert.Equal(interpId, result.Result.Interpretation.InterpretationId);
+        Assert.Equal("Moderada", result.Result.Interpretation.Label);
+        Assert.Equal("Síntomas moderados", result.Result.Interpretation.Description);
+        Assert.Equal("Sin valor diagnóstico", result.Result.Interpretation.Limitations);
+        Assert.Equal(submittedAt, result.Result.CalculatedAt);
     }
 }

@@ -53,6 +53,15 @@ public sealed class GetAssessmentAttemptUseCase(
             attempt = attempt with { Status = "EXPIRED", EndedAt = attempt.ExpiresAt };
         }
 
+        AssessmentResultDetailDto? officialResult = null;
+        if (attempt.Status == "SUBMITTED")
+        {
+            officialResult = await _assessmentAttemptRepository.GetOfficialResultDetailAsync(
+                attempt.AttemptId,
+                userId.Value,
+                cancellationToken);
+        }
+
         var questions = await _assessmentAttemptRepository.GetAttemptProgressQuestionsAsync(
             attempt.AttemptId,
             attempt.InstrumentVersionId,
@@ -67,6 +76,7 @@ public sealed class GetAssessmentAttemptUseCase(
             attempt.Status,
             attempt.StartedAt,
             attempt.ExpiresAt,
-            questions);
+            questions,
+            officialResult);
     }
 }

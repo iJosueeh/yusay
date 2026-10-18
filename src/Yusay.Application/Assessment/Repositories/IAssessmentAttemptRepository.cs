@@ -94,4 +94,16 @@ public interface IAssessmentAttemptRepository
         DateTimeOffset submittedAt,
         IDbTransaction transaction,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AssessmentAttemptListItemRowDto>> ListUserAttemptsAsync(
+        Guid userId,
+        int limit,
+        DateTimeOffset? cursorStartedAt,
+        Guid? cursorAttemptId,
+        CancellationToken cancellationToken = default);
+
+    Task<AssessmentResultDetailDto?> GetOfficialResultDetailAsync(
+        Guid attemptId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }
