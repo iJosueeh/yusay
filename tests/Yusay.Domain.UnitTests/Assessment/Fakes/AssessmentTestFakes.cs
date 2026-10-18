@@ -289,3 +289,23 @@ public sealed class FakeInstrumentAdministrationRepository : IInstrumentAdminist
         return Task.CompletedTask;
     }
 }
+
+public sealed class FakeInstrumentCatalogRepository : IInstrumentCatalogRepository
+{
+    public List<PublishedInstrumentSummaryDto> Summaries { get; } = new();
+    public Dictionary<Guid, PublishedInstrumentDetailsDto> Details { get; } = new();
+
+    public Task<IReadOnlyList<PublishedInstrumentSummaryDto>> ListPublishedInstrumentsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PublishedInstrumentSummaryDto>>(Summaries);
+    }
+
+    public Task<PublishedInstrumentDetailsDto?> GetPublishedInstrumentDetailsAsync(
+        Guid instrumentId,
+        CancellationToken cancellationToken = default)
+    {
+        Details.TryGetValue(instrumentId, out var detail);
+        return Task.FromResult(detail);
+    }
+}

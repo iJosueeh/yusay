@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<IDimensionCatalogRepository, DimensionCatalogRepository>();
         services.AddScoped<IDimensionAdministrationRepository, DimensionAdministrationRepository>();
         services.AddScoped<IInstrumentAdministrationRepository, InstrumentAdministrationRepository>();
+        services.AddScoped<IInstrumentCatalogRepository, InstrumentCatalogRepository>();
 
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();

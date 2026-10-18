@@ -9,7 +9,9 @@ using Yusay.Application.Assessment.Commands.ReturnInstrumentVersionToDraft;
 using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
+using Yusay.Application.Assessment.Queries.GetPublishedInstrumentById;
 using Yusay.Application.Assessment.Queries.ListAdministrativeInstruments;
+using Yusay.Application.Assessment.Queries.ListPublishedInstruments;
 using Yusay.Application.Identity.Commands.RegisterUser;
 using Yusay.Application.Identity.Commands.RequestPasswordReset;
 using Yusay.Application.Identity.Commands.ResetPassword;
@@ -70,12 +72,8 @@ public static class DependencyInjection
         services.AddScoped<IUpdateDimensionVersionUseCase, UpdateDimensionVersionUseCase>();
         services.AddScoped<IActivateDimensionVersionUseCase, ActivateDimensionVersionUseCase>();
         services.AddScoped<IRetireDimensionVersionUseCase, RetireDimensionVersionUseCase>();
-        services.AddScoped<ICreateInstrumentUseCase, CreateInstrumentUseCase>();
-        services.AddScoped<IUpdateInstrumentUseCase, UpdateInstrumentUseCase>();
-        services.AddScoped<ICreateInstrumentVersionUseCase, CreateInstrumentVersionUseCase>();
-        services.AddScoped<IListAdministrativeInstrumentsUseCase, ListAdministrativeInstrumentsUseCase>();
-        services.AddScoped<IGetAdministrativeInstrumentByIdUseCase, GetAdministrativeInstrumentByIdUseCase>();
-        services.AddScoped<IGetAdministrativeInstrumentVersionByIdUseCase, GetAdministrativeInstrumentVersionByIdUseCase>();
+        services.AddScoped<IListPublishedInstrumentsUseCase, ListPublishedInstrumentsUseCase>();
+        services.AddScoped<IGetPublishedInstrumentByIdUseCase, GetPublishedInstrumentByIdUseCase>();
 
         return services;
     }
