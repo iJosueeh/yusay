@@ -66,3 +66,66 @@ public sealed record InstrumentDetailsAdminResponse(
     string Description,
     string Purpose,
     IReadOnlyList<InstrumentVersionSummaryResponse> Versions);
+
+public sealed record DraftReferenceContract(
+    int ReferenceOrder,
+    string Citation,
+    string? Url);
+
+public sealed record DraftOptionContract(
+    int Position,
+    string Label,
+    int? Contribution);
+
+public sealed record DraftQuestionContract(
+    int Position,
+    string Prompt,
+    bool Required,
+    IReadOnlyList<DraftOptionContract> Options);
+
+public sealed record DraftInterpretationContract(
+    string Label,
+    string Description,
+    string? Limitations,
+    int LowerBound,
+    int UpperBound);
+
+public sealed record ReplaceDraftDefinitionRequest(
+    IReadOnlyList<DraftReferenceContract>? References,
+    IReadOnlyList<DraftQuestionContract>? Questions,
+    IReadOnlyList<DraftInterpretationContract>? Interpretations);
+
+public sealed record DraftReferenceResponse(
+    int ReferenceOrder,
+    string Citation,
+    string? Url);
+
+public sealed record DraftOptionResponse(
+    Guid OptionId,
+    int Position,
+    string Label,
+    int? Contribution);
+
+public sealed record DraftQuestionResponse(
+    Guid QuestionId,
+    int Position,
+    string Prompt,
+    bool Required,
+    IReadOnlyList<DraftOptionResponse> Options);
+
+public sealed record DraftInterpretationResponse(
+    Guid InterpretationId,
+    string Label,
+    string Description,
+    string? Limitations,
+    int LowerBound,
+    int UpperBound);
+
+public sealed record DraftDefinitionResponse(
+    Guid InstrumentVersionId,
+    Guid InstrumentId,
+    int Version,
+    string Status,
+    IReadOnlyList<DraftReferenceResponse> References,
+    IReadOnlyList<DraftQuestionResponse> Questions,
+    IReadOnlyList<DraftInterpretationResponse> Interpretations);

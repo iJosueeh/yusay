@@ -54,4 +54,22 @@ public interface IInstrumentAdministrationRepository
     Task<InstrumentDetailsDto?> GetAdministrativeInstrumentDetailsAsync(
         Guid instrumentId,
         CancellationToken cancellationToken = default);
+
+    Task<InstrumentVersion?> GetVersionByIdForUpdateAsync(
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
+
+    Task<DraftDefinitionDto?> GetDraftDefinitionAsync(
+        Guid instrumentVersionId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
+
+    Task ReplaceDraftDefinitionAsync(
+        Guid instrumentVersionId,
+        IReadOnlyList<InstrumentVersionReference> references,
+        IReadOnlyList<(Question Question, IReadOnlyList<(AnswerOption Option, int? Contribution)> Options)> questionsWithChildren,
+        IReadOnlyList<Interpretation> interpretations,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default);
 }

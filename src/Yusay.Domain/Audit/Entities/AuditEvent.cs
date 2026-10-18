@@ -303,6 +303,60 @@ public sealed class AuditEvent
             metadata: null);
     }
 
+    private static readonly IReadOnlyCollection<string> InstrumentVersionComponentCategories =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "REFERENCES",
+            "QUESTIONS",
+            "ANSWER_OPTIONS",
+            "SCORING",
+            "INTERPRETATIONS"
+        };
+
+    public static AuditEvent CreateInstrumentVersionUpdated(
+        Guid instrumentVersionId,
+        Guid administratorUserId,
+        IReadOnlyList<string> changedCategories,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (instrumentVersionId == Guid.Empty)
+        {
+            throw new DomainException("El identificador de la versión del instrumento para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        if (changedCategories is null || changedCategories.Count == 0)
+        {
+            throw new DomainException("La lista de categorías modificadas no puede estar vacía.");
+        }
+
+        foreach (var category in changedCategories)
+        {
+            if (!InstrumentVersionComponentCategories.Contains(category))
+            {
+                throw new DomainException(
+                    $"La categoría '{category}' no está permitida en changed_fields de una edición de INSTRUMENT_VERSION (lista cerrada: REFERENCES, QUESTIONS, ANSWER_OPTIONS, SCORING, INTERPRETATIONS).");
+            }
+        }
+
+        var metadata = JsonSerializer.Serialize(new { changed_fields = changedCategories });
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_UPDATED",
+            targetType: "INSTRUMENT_VERSION",
+            targetIdentifier: instrumentVersionId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: metadata);
+    }
+
     public static AuditEvent CreateCatalogCreated(
         Guid dimensionId,
         Guid administratorUserId,

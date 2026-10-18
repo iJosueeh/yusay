@@ -113,6 +113,9 @@ public sealed class InstrumentAdminHttpTests : IAsyncLifetime
 
         var missingGetVer = await SendGetAsync(client, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}");
         await AssertProblemAsync(missingGetVer, HttpStatusCode.Unauthorized, "No autorizado", MissingBearerMessage);
+
+        var missingPutDraft = await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/draft-definition", Json("""{"questions":[]}"""));
+        await AssertProblemAsync(missingPutDraft, HttpStatusCode.Unauthorized, "No autorizado", MissingBearerMessage);
     }
 
     [Fact]
@@ -139,6 +142,9 @@ public sealed class InstrumentAdminHttpTests : IAsyncLifetime
 
         var getVer = await SendGetAsync(client, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}", accessToken);
         await AssertProblemAsync(getVer, HttpStatusCode.Forbidden, "Acceso denegado", "habilitación administrativa");
+
+        var putDraft = await SendJsonAsync(client, HttpMethod.Put, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/draft-definition", Json("""{"questions":[]}"""), accessToken);
+        await AssertProblemAsync(putDraft, HttpStatusCode.Forbidden, "Acceso denegado", "habilitación administrativa");
     }
 
     [Fact]
@@ -597,6 +603,493 @@ public sealed class InstrumentAdminHttpTests : IAsyncLifetime
 
         var mismatchResp = await SendGetAsync(client, $"/admin/instruments/{otherInstId}/versions/{versionId}", accessToken);
         await AssertProblemAsync(mismatchResp, HttpStatusCode.NotFound, "Recurso no encontrado", VersionNotFoundMessage);
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // PUT /admin/instruments/{instrumentId}/versions/{versionId}/draft-definition (C2)
+    // ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_WithFullComposition_ShouldReturn200AndPersistAllRowsAndAudit()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(
+            client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c2_full")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(
+            client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        var payload = Json("""
+        {
+            "references": [
+                {
+                    "referenceOrder": 1,
+                    "citation": "Kroenke K, Spitzer RL, Williams JB. The PHQ-9. J Gen Intern Med. 2001.",
+                    "url": "https://doi.org/10.1046/j.1525-1497.2001.016009606.x"
+                }
+            ],
+            "questions": [
+                {
+                    "position": 1,
+                    "prompt": "¿Poco interés o alegría por hacer las cosas?",
+                    "required": true,
+                    "options": [
+                        { "position": 1, "label": "Para nada", "contribution": 0 },
+                        { "position": 2, "label": "Varios días", "contribution": 1 },
+                        { "position": 3, "label": "Más de la mitad de los días", "contribution": 2 },
+                        { "position": 4, "label": "Casi todos los días", "contribution": 3 }
+                    ]
+                },
+                {
+                    "position": 2,
+                    "prompt": "¿Se ha sentido decaído/a, deprimido/a o sin esperanzas?",
+                    "required": true,
+                    "options": [
+                        { "position": 1, "label": "Para nada", "contribution": 0 },
+                        { "position": 2, "label": "Varios días", "contribution": 1 },
+                        { "position": 3, "label": "Más de la mitad de los días", "contribution": 2 },
+                        { "position": 4, "label": "Casi todos los días", "contribution": 3 }
+                    ]
+                }
+            ],
+            "interpretations": [
+                {
+                    "label": "Mínima",
+                    "description": "Depresión mínima.",
+                    "limitations": null,
+                    "lowerBound": 0,
+                    "upperBound": 4
+                },
+                {
+                    "label": "Leve",
+                    "description": "Depresión leve.",
+                    "limitations": "Sugerir seguimiento.",
+                    "lowerBound": 5,
+                    "upperBound": 9
+                }
+            ]
+        }
+        """);
+
+        var response = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", payload, accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = doc.RootElement;
+        Assert.Equal(versionId, root.GetProperty("instrumentVersionId").GetGuid());
+        Assert.Equal(instrumentId, root.GetProperty("instrumentId").GetGuid());
+        Assert.Equal("DRAFT", root.GetProperty("status").GetString());
+        Assert.Equal(1, root.GetProperty("references").GetArrayLength());
+        Assert.Equal(2, root.GetProperty("questions").GetArrayLength());
+        Assert.Equal(4, root.GetProperty("questions")[0].GetProperty("options").GetArrayLength());
+        Assert.Equal(2, root.GetProperty("interpretations").GetArrayLength());
+
+        // Verificar filas en PostgreSQL
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+
+        var refCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.instrument_version_reference WHERE instrument_version_id = @VersionId",
+            new { VersionId = versionId });
+        Assert.Equal(1, refCount);
+
+        var qCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.question WHERE instrument_version_id = @VersionId",
+            new { VersionId = versionId });
+        Assert.Equal(2, qCount);
+
+        var optCount = await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*) FROM yusay.answer_option ao
+            JOIN yusay.question q ON q.question_id = ao.question_id
+            WHERE q.instrument_version_id = @VersionId
+            """,
+            new { VersionId = versionId });
+        Assert.Equal(8, optCount);
+
+        var scCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.scoring_contribution WHERE instrument_version_id = @VersionId",
+            new { VersionId = versionId });
+        Assert.Equal(8, scCount);
+
+        var interpCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.interpretation WHERE instrument_version_id = @VersionId",
+            new { VersionId = versionId });
+        Assert.Equal(2, interpCount);
+
+        // Scoring definition (1:1 SUM) se mantiene exactamente una
+        var sdCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.scoring_definition WHERE instrument_version_id = @VersionId",
+            new { VersionId = versionId });
+        Assert.Equal(1, sdCount);
+
+        // Evento de auditoría CATALOG_UPDATED sobre INSTRUMENT_VERSION
+        var audits = await QueryAuditAsync(versionId, "CATALOG_UPDATED");
+        var audit = Assert.Single(audits);
+        Assert.Equal("ADMINISTRATOR", audit.Actor_kind);
+        Assert.Equal(adminUserId, audit.Actor_user_id);
+        Assert.Equal("INSTRUMENT_VERSION", audit.Target_type);
+
+        var changed = ReadChangedFields(audit.Metadata);
+        Assert.Equal(new[] { "REFERENCES", "QUESTIONS", "ANSWER_OPTIONS", "SCORING", "INTERPRETATIONS" }, changed);
+    }
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_WithIdenticalPayload_ShouldBeNoOpPreservingUuidsAndNoAudit()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(
+            client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c2_noop")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(
+            client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        var payload = Json("""
+        {
+            "references": [
+                { "referenceOrder": 1, "citation": "Ref 1", "url": null }
+            ],
+            "questions": [
+                {
+                    "position": 1,
+                    "prompt": "Pregunta 1",
+                    "required": true,
+                    "options": [
+                        { "position": 1, "label": "Opción 1", "contribution": 1 }
+                    ]
+                }
+            ],
+            "interpretations": [
+                { "label": "Interp 1", "description": "Desc 1", "limitations": null, "lowerBound": 0, "upperBound": 1 }
+            ]
+        }
+        """);
+
+        // 1er PUT: Crea la composición
+        var firstResp = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", payload, accessToken);
+        Assert.Equal(HttpStatusCode.OK, firstResp.StatusCode);
+
+        using var firstDoc = JsonDocument.Parse(await firstResp.Content.ReadAsStringAsync());
+        var firstQId = firstDoc.RootElement.GetProperty("questions")[0].GetProperty("questionId").GetGuid();
+        var firstOptId = firstDoc.RootElement.GetProperty("questions")[0].GetProperty("options")[0].GetProperty("optionId").GetGuid();
+        var firstInterpId = firstDoc.RootElement.GetProperty("interpretations")[0].GetProperty("interpretationId").GetGuid();
+
+        var auditsBefore = await QueryAuditAsync(versionId, "CATALOG_UPDATED");
+        Assert.Single(auditsBefore);
+
+        // 2do PUT con payload idéntico: debe ser No-Op
+        var identicalPayload = Json("""
+        {
+            "references": [
+                { "referenceOrder": 1, "citation": "Ref 1", "url": null }
+            ],
+            "questions": [
+                {
+                    "position": 1,
+                    "prompt": "Pregunta 1",
+                    "required": true,
+                    "options": [
+                        { "position": 1, "label": "Opción 1", "contribution": 1 }
+                    ]
+                }
+            ],
+            "interpretations": [
+                { "label": "Interp 1", "description": "Desc 1", "limitations": null, "lowerBound": 0, "upperBound": 1 }
+            ]
+        }
+        """);
+
+        var secondResp = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", identicalPayload, accessToken);
+        Assert.Equal(HttpStatusCode.OK, secondResp.StatusCode);
+
+        using var secondDoc = JsonDocument.Parse(await secondResp.Content.ReadAsStringAsync());
+        var secondQId = secondDoc.RootElement.GetProperty("questions")[0].GetProperty("questionId").GetGuid();
+        var secondOptId = secondDoc.RootElement.GetProperty("questions")[0].GetProperty("options")[0].GetProperty("optionId").GetGuid();
+        var secondInterpId = secondDoc.RootElement.GetProperty("interpretations")[0].GetProperty("interpretationId").GetGuid();
+
+        // UUIDs preservados
+        Assert.Equal(firstQId, secondQId);
+        Assert.Equal(firstOptId, secondOptId);
+        Assert.Equal(firstInterpId, secondInterpId);
+
+        // Sin nuevo evento de auditoría
+        var auditsAfter = await QueryAuditAsync(versionId, "CATALOG_UPDATED");
+        Assert.Single(auditsAfter);
+    }
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_WithChangedCategories_ShouldAuditOnlyModifiedCategories()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(
+            client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c2_diff")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(
+            client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        // 1er PUT: base
+        await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""
+            {
+                "references": [
+                    { "referenceOrder": 1, "citation": "Citation Original", "url": "https://example.com" }
+                ],
+                "questions": [
+                    {
+                        "position": 1,
+                        "prompt": "Pregunta original",
+                        "required": true,
+                        "options": [
+                            { "position": 1, "label": "Opción original", "contribution": 0 }
+                        ]
+                    }
+                ],
+                "interpretations": [
+                    { "label": "Interp", "description": "Desc", "limitations": null, "lowerBound": 0, "upperBound": 1 }
+                ]
+            }
+            """), accessToken);
+
+        // 2do PUT: solo cambia preguntas y scoring (references e interpretations idénticas)
+        var modifiedResp = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""
+            {
+                "references": [
+                    { "referenceOrder": 1, "citation": "Citation Original", "url": "https://example.com" }
+                ],
+                "questions": [
+                    {
+                        "position": 1,
+                        "prompt": "Pregunta MODIFICADA",
+                        "required": true,
+                        "options": [
+                            { "position": 1, "label": "Opción original", "contribution": 5 }
+                        ]
+                    }
+                ],
+                "interpretations": [
+                    { "label": "Interp", "description": "Desc", "limitations": null, "lowerBound": 0, "upperBound": 1 }
+                ]
+            }
+            """), accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, modifiedResp.StatusCode);
+
+        var audits = await QueryAuditAsync(versionId, "CATALOG_UPDATED");
+        Assert.Equal(2, audits.Length);
+
+        var secondAuditChanged = ReadChangedFields(audits[1].Metadata);
+        Assert.Equal(new[] { "QUESTIONS", "SCORING" }, secondAuditChanged);
+    }
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_WithIncompleteDraftAndNullContributions_ShouldPersistWithoutScoringRows()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(
+            client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c2_incompl")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(
+            client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        // DRAFT incompleto: 0 referencias, 1 pregunta con opciones sin puntaje (null), 0 interpretaciones
+        var response = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""
+            {
+                "references": [],
+                "questions": [
+                    {
+                        "position": 1,
+                        "prompt": "¿Pregunta cualitativa sin puntaje?",
+                        "required": false,
+                        "options": [
+                            { "position": 1, "label": "Opción 1", "contribution": null },
+                            { "position": 2, "label": "Opción 2", "contribution": null }
+                        ]
+                    }
+                ],
+                "interpretations": []
+            }
+            """), accessToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var scCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.scoring_contribution WHERE instrument_version_id = @VersionId",
+            new { VersionId = versionId });
+        Assert.Equal(0, scCount);
+
+        var optCount = await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*) FROM yusay.answer_option ao
+            JOIN yusay.question q ON q.question_id = ao.question_id
+            WHERE q.instrument_version_id = @VersionId
+            """,
+            new { VersionId = versionId });
+        Assert.Equal(2, optCount);
+    }
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_WhenVersionIsNotDraft_ShouldReturn409()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(
+            client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c2_notdraft")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(
+            client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        // Cambiar estado a READY en PostgreSQL
+        await using (var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync())
+        {
+            await connection.ExecuteAsync(
+                "UPDATE yusay.instrument_version SET status = 'READY' WHERE instrument_version_id = @VersionId",
+                new { VersionId = versionId });
+        }
+
+        var response = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""{"questions":[]}"""), accessToken);
+
+        await AssertProblemAsync(response, HttpStatusCode.Conflict, "Conflicto", "DRAFT");
+    }
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_WhenNotFound_ShouldReturn404()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var missingInstResp = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{Guid.NewGuid()}/versions/{Guid.NewGuid()}/draft-definition",
+            Json("""{"questions":[]}"""), accessToken);
+        await AssertProblemAsync(missingInstResp, HttpStatusCode.NotFound, "Recurso no encontrado", "no existe");
+    }
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_WithStructuralValidationErrors_ShouldReturn400()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(
+            client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c2_val")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(
+            client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        // 1. Posición duplicada de preguntas
+        var dupQResp = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""
+            {
+                "questions": [
+                    { "position": 1, "prompt": "P1", "options": [] },
+                    { "position": 1, "prompt": "P1 bis", "options": [] }
+                ]
+            }
+            """), accessToken);
+        await AssertProblemAsync(dupQResp, HttpStatusCode.BadRequest, "Solicitud no válida", "duplicada");
+
+        // 2. Límites de interpretación invertidos
+        var invBoundsResp = await SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""
+            {
+                "interpretations": [
+                    { "label": "Inv", "description": "Desc", "lowerBound": 10, "upperBound": 5 }
+                ]
+            }
+            """), accessToken);
+        await AssertProblemAsync(invBoundsResp, HttpStatusCode.BadRequest, "Solicitud no válida", "límite inferior");
+    }
+
+    [Fact]
+    public async Task ReplaceDraftDefinition_ConcurrentRequests_ShouldSerializeUnderForUpdate()
+    {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var (adminUserId, accessToken) = await CreateSessionAsync();
+        await GrantAdministratorAsync(adminUserId);
+
+        var instResp = await SendJsonAsync(
+            client, HttpMethod.Post, "/admin/instruments", CreateInstrumentBody(NewCode("c2_conc")), accessToken);
+        var instrumentId = await ReadGuidPropertyAsync(instResp, "instrumentId");
+
+        var verResp = await SendJsonAsync(
+            client, HttpMethod.Post, $"/admin/instruments/{instrumentId}/versions", CreateVersionBody(1), accessToken);
+        var versionId = await ReadGuidPropertyAsync(verResp, "instrumentVersionId");
+
+        var task1 = SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""
+            {
+                "questions": [
+                    { "position": 1, "prompt": "Concurrente A", "options": [] }
+                ]
+            }
+            """), accessToken);
+
+        var task2 = SendJsonAsync(
+            client, HttpMethod.Put, $"/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
+            Json("""
+            {
+                "questions": [
+                    { "position": 1, "prompt": "Concurrente B", "options": [] }
+                ]
+            }
+            """), accessToken);
+
+        var responses = await Task.WhenAll(task1, task2);
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+
+        await using var connection = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var qCount = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.question WHERE instrument_version_id = @VersionId",
+            new { VersionId = versionId });
+        Assert.Equal(1, qCount);
     }
 
     // ------------------------------------------------------------------------------------------

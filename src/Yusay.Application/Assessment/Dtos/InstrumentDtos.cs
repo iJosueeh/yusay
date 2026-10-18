@@ -44,3 +44,38 @@ public sealed record InstrumentDetailsDto(
     string Description,
     string Purpose,
     IReadOnlyList<InstrumentVersionSummaryDto> Versions);
+
+public sealed record DraftReferenceDto(
+    int ReferenceOrder,
+    string Citation,
+    string? Url);
+
+public sealed record DraftOptionDto(
+    Guid OptionId,
+    int Position,
+    string Label,
+    int? Contribution);
+
+public sealed record DraftQuestionDto(
+    Guid QuestionId,
+    int Position,
+    string Prompt,
+    bool Required,
+    IReadOnlyList<DraftOptionDto> Options);
+
+public sealed record DraftInterpretationDto(
+    Guid InterpretationId,
+    string Label,
+    string Description,
+    string? Limitations,
+    int LowerBound,
+    int UpperBound);
+
+public sealed record DraftDefinitionDto(
+    Guid InstrumentVersionId,
+    Guid InstrumentId,
+    int Version,
+    string Status,
+    IReadOnlyList<DraftReferenceDto> References,
+    IReadOnlyList<DraftQuestionDto> Questions,
+    IReadOnlyList<DraftInterpretationDto> Interpretations);

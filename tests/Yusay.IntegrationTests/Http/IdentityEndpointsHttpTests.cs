@@ -258,6 +258,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/admin/instruments", "/admin/instruments/{instrumentId}",
                 "/admin/instruments/{instrumentId}/versions",
                 "/admin/instruments/{instrumentId}/versions/{versionId}",
+                "/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition",
                 "/auth/password-reset/confirm",
                 "/auth/password-reset/request", "/auth/register", "/auth/sign-in", "/auth/sign-out",
                 "/auth/verify-email", "/check-ins", "/check-ins/{checkInId}", "/dimensions",
@@ -294,13 +295,14 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("RetireDimensionVersion",
             ReadOperationId(paths, "/admin/dimensions/{dimensionId}/versions/{dimensionVersionId}/retirement", "post"));
 
-        // Catálogo de Instruments (C1 de RF-019 / RF-005)
+        // Catálogo de Instruments (C1 y C2 de RF-019 / RF-005)
         Assert.Equal("ListAdministrativeInstruments", ReadOperationId(paths, "/admin/instruments", "get"));
         Assert.Equal("GetAdministrativeInstrumentById", ReadOperationId(paths, "/admin/instruments/{instrumentId}", "get"));
         Assert.Equal("CreateInstrument", ReadOperationId(paths, "/admin/instruments", "post"));
         Assert.Equal("UpdateInstrument", ReadOperationId(paths, "/admin/instruments/{instrumentId}", "patch"));
         Assert.Equal("CreateInstrumentVersion", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions", "post"));
         Assert.Equal("GetAdministrativeInstrumentVersionById", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}", "get"));
+        Assert.Equal("ReplaceDraftDefinition", ReadOperationId(paths, "/admin/instruments/{instrumentId}/versions/{versionId}/draft-definition", "put"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)

@@ -51,4 +51,25 @@ public static class InstrumentContractMapper
                 v.AdministrationConditions,
                 v.LicenseInformation,
                 v.Limitations)).ToList());
+
+    public static DraftDefinitionResponse ToResponse(DraftDefinitionDto dto) =>
+        new(
+            dto.InstrumentVersionId,
+            dto.InstrumentId,
+            dto.Version,
+            dto.Status,
+            dto.References.Select(r => new DraftReferenceResponse(r.ReferenceOrder, r.Citation, r.Url)).ToList(),
+            dto.Questions.Select(q => new DraftQuestionResponse(
+                q.QuestionId,
+                q.Position,
+                q.Prompt,
+                q.Required,
+                q.Options.Select(o => new DraftOptionResponse(o.OptionId, o.Position, o.Label, o.Contribution)).ToList())).ToList(),
+            dto.Interpretations.Select(i => new DraftInterpretationResponse(
+                i.InterpretationId,
+                i.Label,
+                i.Description,
+                i.Limitations,
+                i.LowerBound,
+                i.UpperBound)).ToList());
 }

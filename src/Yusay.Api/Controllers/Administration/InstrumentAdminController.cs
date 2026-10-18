@@ -5,6 +5,7 @@ using Yusay.Api.Common;
 using Yusay.Api.Contracts.Administration;
 using Yusay.Application.Assessment.Commands.CreateInstrument;
 using Yusay.Application.Assessment.Commands.CreateInstrumentVersion;
+using Yusay.Application.Assessment.Commands.ReplaceDraftDefinition;
 using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
@@ -20,6 +21,7 @@ public sealed class InstrumentAdminController(
     ICreateInstrumentUseCase createInstrumentUseCase,
     IUpdateInstrumentUseCase updateInstrumentUseCase,
     ICreateInstrumentVersionUseCase createInstrumentVersionUseCase,
+    IReplaceDraftDefinitionUseCase replaceDraftDefinitionUseCase,
     IListAdministrativeInstrumentsUseCase listAdministrativeInstrumentsUseCase,
     IGetAdministrativeInstrumentByIdUseCase getAdministrativeInstrumentByIdUseCase,
     IGetAdministrativeInstrumentVersionByIdUseCase getAdministrativeInstrumentVersionByIdUseCase) : ControllerBase
@@ -27,6 +29,7 @@ public sealed class InstrumentAdminController(
     private readonly ICreateInstrumentUseCase _createInstrumentUseCase = createInstrumentUseCase;
     private readonly IUpdateInstrumentUseCase _updateInstrumentUseCase = updateInstrumentUseCase;
     private readonly ICreateInstrumentVersionUseCase _createInstrumentVersionUseCase = createInstrumentVersionUseCase;
+    private readonly IReplaceDraftDefinitionUseCase _replaceDraftDefinitionUseCase = replaceDraftDefinitionUseCase;
     private readonly IListAdministrativeInstrumentsUseCase _listAdministrativeInstrumentsUseCase =
         listAdministrativeInstrumentsUseCase;
     private readonly IGetAdministrativeInstrumentByIdUseCase _getAdministrativeInstrumentByIdUseCase =
@@ -142,6 +145,54 @@ public sealed class InstrumentAdminController(
     {
         var result = await _getAdministrativeInstrumentVersionByIdUseCase.ExecuteAsync(
             instrumentId, versionId, cancellationToken);
+
+        return Ok(InstrumentContractMapper.ToResponse(result));
+    }
+
+    [HttpPut("{instrumentId:guid}/versions/{versionId:guid}/draft-definition")]
+    [EndpointName("ReplaceDraftDefinition")]
+    [ProducesResponseType(typeof(DraftDefinitionResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<DraftDefinitionResponse>> ReplaceDraftDefinition(
+        Guid instrumentId,
+        Guid versionId,
+        ReplaceDraftDefinitionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var references = (request.References ?? [])
+            .Select(r => new DraftReferenceInput(r.ReferenceOrder, r.Citation, r.Url))
+            .ToList();
+
+        var questions = (request.Questions ?? [])
+            .Select(q => new DraftQuestionInput(
+                q.Position,
+                q.Prompt,
+                q.Required,
+                (q.Options ?? []).Select(o => new DraftOptionInput(o.Position, o.Label, o.Contribution)).ToList()))
+            .ToList();
+
+        var interpretations = (request.Interpretations ?? [])
+            .Select(i => new DraftInterpretationInput(
+                i.Label,
+                i.Description,
+                i.Limitations,
+                i.LowerBound,
+                i.UpperBound))
+            .ToList();
+
+        var result = await _replaceDraftDefinitionUseCase.ExecuteAsync(
+            new ReplaceDraftDefinitionCommand(
+                instrumentId,
+                versionId,
+                references,
+                questions,
+                interpretations),
+            cancellationToken);
 
         return Ok(InstrumentContractMapper.ToResponse(result));
     }

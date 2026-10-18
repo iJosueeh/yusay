@@ -171,4 +171,83 @@ public sealed class FakeInstrumentAdministrationRepository : IInstrumentAdminist
             inst.Purpose,
             instVersions));
     }
+
+    public Dictionary<Guid, DraftDefinitionDto> DraftDefinitions { get; } = new();
+
+    public Task<InstrumentVersion?> GetVersionByIdForUpdateAsync(
+        Guid instrumentVersionId,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        return GetVersionByIdAsync(instrumentVersionId, cancellationToken);
+    }
+
+    public Task<DraftDefinitionDto?> GetDraftDefinitionAsync(
+        Guid versionId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (DraftDefinitions.TryGetValue(versionId, out var existing))
+        {
+            return Task.FromResult<DraftDefinitionDto?>(existing);
+        }
+
+        var version = Versions.FirstOrDefault(v => v.InstrumentVersionId == versionId);
+        if (version == null)
+        {
+            return Task.FromResult<DraftDefinitionDto?>(null);
+        }
+
+        var empty = new DraftDefinitionDto(
+            version.InstrumentVersionId,
+            version.InstrumentId,
+            version.Version,
+            version.Status.ToDbValue(),
+            Array.Empty<DraftReferenceDto>(),
+            Array.Empty<DraftQuestionDto>(),
+            Array.Empty<DraftInterpretationDto>());
+
+        return Task.FromResult<DraftDefinitionDto?>(empty);
+    }
+
+    public Task ReplaceDraftDefinitionAsync(
+        Guid instrumentVersionId,
+        IReadOnlyList<InstrumentVersionReference> references,
+        IReadOnlyList<(Question Question, IReadOnlyList<(AnswerOption Option, int? Contribution)> Options)> questionsWithChildren,
+        IReadOnlyList<Interpretation> interpretations,
+        IDbTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        var version = Versions.FirstOrDefault(v => v.InstrumentVersionId == instrumentVersionId);
+        var refDtos = references.Select(r => new DraftReferenceDto(r.ReferenceOrder, r.Citation, r.Url)).ToList();
+        var qDtos = questionsWithChildren.Select(q => new DraftQuestionDto(
+            q.Question.QuestionId,
+            q.Question.Position,
+            q.Question.Prompt,
+            q.Question.Required,
+            q.Options.Select(o => new DraftOptionDto(
+                o.Option.OptionId,
+                o.Option.Position,
+                o.Option.Label,
+                o.Contribution)).ToList())).ToList();
+        var iDtos = interpretations.Select(i => new DraftInterpretationDto(
+            i.InterpretationId,
+            i.Label,
+            i.Description,
+            i.Limitations,
+            i.LowerBound,
+            i.UpperBound)).ToList();
+
+        var dto = new DraftDefinitionDto(
+            instrumentVersionId,
+            version?.InstrumentId ?? Guid.Empty,
+            version?.Version ?? 1,
+            version?.Status.ToDbValue() ?? "DRAFT",
+            refDtos,
+            qDtos,
+            iDtos);
+
+        DraftDefinitions[instrumentVersionId] = dto;
+        return Task.CompletedTask;
+    }
 }

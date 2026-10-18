@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Yusay.Application.Assessment.Commands.CreateInstrument;
 using Yusay.Application.Assessment.Commands.CreateInstrumentVersion;
+using Yusay.Application.Assessment.Commands.ReplaceDraftDefinition;
 using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
@@ -36,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<ICreateInstrumentUseCase, CreateInstrumentUseCase>();
         services.AddScoped<IUpdateInstrumentUseCase, UpdateInstrumentUseCase>();
         services.AddScoped<ICreateInstrumentVersionUseCase, CreateInstrumentVersionUseCase>();
+        services.AddScoped<IReplaceDraftDefinitionUseCase, ReplaceDraftDefinitionUseCase>();
         services.AddScoped<IListAdministrativeInstrumentsUseCase, ListAdministrativeInstrumentsUseCase>();
         services.AddScoped<IGetAdministrativeInstrumentByIdUseCase, GetAdministrativeInstrumentByIdUseCase>();
         services.AddScoped<IGetAdministrativeInstrumentVersionByIdUseCase, GetAdministrativeInstrumentVersionByIdUseCase>();
