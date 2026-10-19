@@ -5,6 +5,7 @@ using Yusay.Api.Contracts.Assessment;
 using Yusay.Application.Assessment.Commands.SaveAssessmentAnswers;
 using Yusay.Application.Assessment.Commands.SubmitAssessmentAttempt;
 using Yusay.Application.Assessment.Queries.GetAssessmentAttempt;
+using Yusay.Application.Assessment.Queries.GetAssessmentGuidance;
 using Yusay.Application.Assessment.Queries.ListAssessments;
 
 namespace Yusay.Api.Controllers.Assessment;
@@ -17,12 +18,15 @@ public sealed class AssessmentController(
     IListAssessmentsUseCase listAssessmentsUseCase,
     IGetAssessmentAttemptUseCase getAssessmentAttemptUseCase,
     ISaveAssessmentAnswersUseCase saveAssessmentAnswersUseCase,
-    ISubmitAssessmentAttemptUseCase submitAssessmentAttemptUseCase) : ControllerBase
+    ISubmitAssessmentAttemptUseCase submitAssessmentAttemptUseCase,
+    IGetAssessmentGuidanceUseCase getAssessmentGuidanceUseCase) : ControllerBase
 {
     private readonly IListAssessmentsUseCase _listAssessmentsUseCase = listAssessmentsUseCase;
     private readonly IGetAssessmentAttemptUseCase _getAssessmentAttemptUseCase = getAssessmentAttemptUseCase;
     private readonly ISaveAssessmentAnswersUseCase _saveAssessmentAnswersUseCase = saveAssessmentAnswersUseCase;
     private readonly ISubmitAssessmentAttemptUseCase _submitAssessmentAttemptUseCase = submitAssessmentAttemptUseCase;
+    private readonly IGetAssessmentGuidanceUseCase _getAssessmentGuidanceUseCase = getAssessmentGuidanceUseCase;
+
 
     [HttpGet]
     [EndpointName("ListAssessments")]
@@ -96,5 +100,22 @@ public sealed class AssessmentController(
             cancellationToken);
 
         return Ok(AssessmentAttemptContractMapper.ToResponse(result));
+    }
+
+    [HttpGet("{attemptId:guid}/guidance")]
+    [EndpointName("GetAssessmentGuidance")]
+    [ProducesResponseType(typeof(AssessmentGuidanceResponse), StatusCodes.Status200OK, "application/json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound, "application/problem+json")]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable, "application/problem+json")]
+    public async Task<ActionResult<AssessmentGuidanceResponse>> GetGuidance(
+        Guid attemptId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _getAssessmentGuidanceUseCase.ExecuteAsync(
+            new GetAssessmentGuidanceQuery(attemptId),
+            cancellationToken);
+
+        return Ok(AssessmentAttemptContractMapper.ToGuidanceResponse(result));
     }
 }

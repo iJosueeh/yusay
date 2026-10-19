@@ -740,6 +740,89 @@ public sealed class AssessmentAttemptRepository(IDbConnectionFactory connectionF
             row.CalculatedAt);
     }
 
+    public async Task<AssessmentGuidanceAttemptDataDto?> GetAttemptGuidanceDataAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+                a.attempt_id AS AttemptId,
+                i.instrument_id AS InstrumentId,
+                i.code AS InstrumentCode,
+                i.name AS InstrumentName,
+                v.instrument_version_id AS InstrumentVersionId,
+                v.version AS Version,
+                r.score AS Score,
+                r.calculated_at AS CalculatedAt,
+                inp.interpretation_id AS InterpretationId,
+                inp.label AS InterpretationLabel,
+                inp.description AS InterpretationDescription,
+                inp.limitations AS InterpretationLimitations
+            FROM yusay.assessment_attempt a
+            INNER JOIN yusay.instrument i ON i.instrument_id = a.instrument_id
+            INNER JOIN yusay.instrument_version v ON v.instrument_version_id = a.instrument_version_id
+            INNER JOIN yusay.assessment_result r ON r.attempt_id = a.attempt_id
+            INNER JOIN yusay.interpretation inp ON inp.interpretation_id = r.interpretation_id
+            WHERE a.attempt_id = @AttemptId
+              AND a.user_id = @UserId
+              AND a.status = 'SUBMITTED';
+            """;
+
+        var connection = transaction?.Connection;
+        if (connection is not null)
+        {
+            var row = await connection.QuerySingleOrDefaultAsync<GuidanceAttemptDataRow>(new CommandDefinition(
+                sql,
+                new { AttemptId = attemptId, UserId = userId },
+                transaction: transaction,
+                cancellationToken: cancellationToken));
+
+            return row is null ? null : MapGuidanceAttemptData(row);
+        }
+
+        await using var openConnection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var openRow = await openConnection.QuerySingleOrDefaultAsync<GuidanceAttemptDataRow>(new CommandDefinition(
+            sql,
+            new { AttemptId = attemptId, UserId = userId },
+            cancellationToken: cancellationToken));
+
+        return openRow is null ? null : MapGuidanceAttemptData(openRow);
+    }
+
+    private static AssessmentGuidanceAttemptDataDto MapGuidanceAttemptData(GuidanceAttemptDataRow r) =>
+        new(
+            r.AttemptId,
+            r.InstrumentId,
+            r.InstrumentCode,
+            r.InstrumentName,
+            r.InstrumentVersionId,
+            r.Version,
+            r.Score,
+            r.CalculatedAt,
+            r.InterpretationId,
+            r.InterpretationLabel,
+            r.InterpretationDescription,
+            r.InterpretationLimitations);
+
+    private sealed class GuidanceAttemptDataRow
+    {
+        public Guid AttemptId { get; set; }
+        public Guid InstrumentId { get; set; }
+        public string InstrumentCode { get; set; } = string.Empty;
+        public string InstrumentName { get; set; } = string.Empty;
+        public Guid InstrumentVersionId { get; set; }
+        public int Version { get; set; }
+        public int Score { get; set; }
+        public DateTimeOffset CalculatedAt { get; set; }
+        public Guid InterpretationId { get; set; }
+        public string InterpretationLabel { get; set; } = string.Empty;
+        public string InterpretationDescription { get; set; } = string.Empty;
+        public string? InterpretationLimitations { get; set; }
+    }
+
+
     private static SubmitAssessmentAttemptResult MapOfficialResult(OfficialResultRow r) =>
         new(
             r.AttemptId,

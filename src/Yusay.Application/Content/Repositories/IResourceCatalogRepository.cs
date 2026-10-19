@@ -1,3 +1,4 @@
+using System.Data;
 using Yusay.Application.Content.Dtos;
 
 namespace Yusay.Application.Content.Repositories;
@@ -16,10 +17,17 @@ public interface IResourceCatalogRepository
         int limit,
         string? cursorTitle,
         Guid? cursorResourceId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IDbTransaction? transaction = null);
+
 
     Task<Guid?> GetInterpretationIdForSubmittedAttemptAsync(
         Guid attemptId,
         Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ResourceTopicDto>> GetInterpretationTopicsAsync(
+        Guid interpretationId,
+        IDbTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 }

@@ -96,4 +96,26 @@ public static class AssessmentAttemptContractMapper
                 result.Interpretation.Label,
                 result.Interpretation.Description,
                 result.Interpretation.Limitations));
+
+    public static AssessmentGuidanceResponse ToGuidanceResponse(AssessmentGuidanceDto dto) =>
+        new(
+            dto.AttemptId,
+            new AssessmentGuidanceInstrumentResponse(
+                dto.Instrument.InstrumentId,
+                dto.Instrument.Code,
+                dto.Instrument.Name,
+                dto.Instrument.InstrumentVersionId,
+                dto.Instrument.Version),
+            new AssessmentGuidanceResultResponse(
+                dto.Result.Score,
+                dto.Result.CalculatedAt),
+            new AssessmentGuidanceInterpretationResponse(
+                dto.Interpretation.InterpretationId,
+                dto.Interpretation.Label,
+                dto.Interpretation.Description,
+                dto.Interpretation.Limitations),
+            dto.Topics.Select(t => new Yusay.Api.Contracts.Content.ResourceTopicResponse(t.TopicId, t.Code, t.Name)).ToList(),
+            dto.Resources.Select(PublishedContentContractMapper.ToResponse).ToList(),
+            dto.Disclaimer);
+
 }

@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 
 namespace Yusay.Application.Common.Interfaces;
@@ -10,5 +11,10 @@ public interface IUnitOfWork
 
     Task ExecuteInTransactionAsync(
         Func<DbTransaction, Task> operation,
+        CancellationToken cancellationToken = default);
+
+    Task<T> ExecuteInReadOnlyTransactionAsync<T>(
+        Func<DbTransaction, Task<T>> operation,
+        IsolationLevel isolationLevel = IsolationLevel.RepeatableRead,
         CancellationToken cancellationToken = default);
 }

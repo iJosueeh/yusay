@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Yusay.Api.Common;
 using Yusay.Api.Contracts.Content;
 using Yusay.Application.Content.Queries.GetPublishedResourceById;
 using Yusay.Application.Content.Queries.ListPublishedResources;

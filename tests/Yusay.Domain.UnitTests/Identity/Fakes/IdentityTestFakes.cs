@@ -24,7 +24,17 @@ public sealed class FakeUnitOfWork : IUnitOfWork
         TransactionExecuted = true;
         await operation(null!);
     }
+
+    public async Task<T> ExecuteInReadOnlyTransactionAsync<T>(
+        Func<DbTransaction, Task<T>> operation,
+        System.Data.IsolationLevel isolationLevel = System.Data.IsolationLevel.RepeatableRead,
+        CancellationToken cancellationToken = default)
+    {
+        TransactionExecuted = true;
+        return await operation(null!);
+    }
 }
+
 
 public sealed class FakeUserAccountRepository : IUserAccountRepository
 {

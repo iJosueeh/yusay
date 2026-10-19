@@ -697,4 +697,42 @@ public sealed class FakeAssessmentAttemptRepository : IAssessmentAttemptReposito
             interpDto,
             res.CalculatedAt));
     }
+
+    public Task<AssessmentGuidanceAttemptDataDto?> GetAttemptGuidanceDataAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        var attempt = Attempts.FirstOrDefault(a =>
+            a.AttemptId == attemptId &&
+            a.UserId == userId &&
+            a.Status == AssessmentAttemptStatus.Submitted);
+
+        if (attempt is null || !AttemptResults.TryGetValue(attemptId, out var res))
+        {
+            return Task.FromResult<AssessmentGuidanceAttemptDataDto?>(null);
+        }
+
+        IReadOnlyList<InterpretationDataDto> interps = VersionInterpretations.TryGetValue(attempt.InstrumentVersionId, out var i)
+            ? i
+            : Array.Empty<InterpretationDataDto>();
+        var foundInterp = interps.FirstOrDefault(x => x.InterpretationId == res.InterpretationId);
+
+        var dto = new AssessmentGuidanceAttemptDataDto(
+            attempt.AttemptId,
+            attempt.InstrumentId,
+            "TEST-CODE",
+            "Test Instrument",
+            attempt.InstrumentVersionId,
+            1,
+            res.Score,
+            res.CalculatedAt,
+            res.InterpretationId,
+            foundInterp?.Label ?? "Unknown",
+            foundInterp?.Description ?? "No description",
+            foundInterp?.Limitations);
+
+        return Task.FromResult<AssessmentGuidanceAttemptDataDto?>(dto);
+    }
 }

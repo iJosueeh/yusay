@@ -77,7 +77,8 @@ public class GetPublishedResourceByIdUseCaseTests
             int limit,
             string? cursorTitle,
             Guid? cursorResourceId,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            System.Data.IDbTransaction? transaction = null) =>
             Task.FromResult<IReadOnlyList<ResourceSummaryDto>>(Array.Empty<ResourceSummaryDto>());
 
         public Task<Guid?> GetInterpretationIdForSubmittedAttemptAsync(
@@ -85,5 +86,12 @@ public class GetPublishedResourceByIdUseCaseTests
             Guid userId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<Guid?>(null);
+
+        public Task<IReadOnlyList<ResourceTopicDto>> GetInterpretationTopicsAsync(
+            Guid interpretationId,
+            System.Data.IDbTransaction? transaction = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ResourceTopicDto>>(Array.Empty<ResourceTopicDto>());
     }
+
 }

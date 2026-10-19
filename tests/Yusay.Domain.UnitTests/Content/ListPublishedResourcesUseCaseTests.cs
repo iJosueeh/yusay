@@ -161,7 +161,8 @@ public class ListPublishedResourcesUseCaseTests
             int limit,
             string? cursorTitle,
             Guid? cursorResourceId,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            System.Data.IDbTransaction? transaction = null)
         {
             LastQueriedInterpretationId = interpretationId;
             return Task.FromResult<IReadOnlyList<ResourceSummaryDto>>(ItemsToReturn);
@@ -175,5 +176,11 @@ public class ListPublishedResourcesUseCaseTests
             SubmittedAttemptInterpretations.TryGetValue(attemptId, out var interpretationId);
             return Task.FromResult(interpretationId == Guid.Empty ? (Guid?)null : interpretationId);
         }
+
+        public Task<IReadOnlyList<ResourceTopicDto>> GetInterpretationTopicsAsync(
+            Guid interpretationId,
+            System.Data.IDbTransaction? transaction = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ResourceTopicDto>>(Array.Empty<ResourceTopicDto>());
     }
 }

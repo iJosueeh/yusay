@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Yusay.Api.Authorization;
+using Yusay.Api.Common;
 using Yusay.Api.Contracts.Administration;
 using Yusay.Application.Content.Commands.AddResourceTopic;
 using Yusay.Application.Content.Commands.CreateResource;

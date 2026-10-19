@@ -1,9 +1,9 @@
-using Yusay.Api.Contracts.Administration;
+using Yusay.Api.Contracts.Content;
 using Yusay.Application.Content.Dtos;
 
-namespace Yusay.Api.Controllers.Administration;
+namespace Yusay.Api.Common;
 
-public static class ContentContractMapper
+public static class PublishedContentContractMapper
 {
     public static TopicResponse ToResponse(TopicDto dto) =>
         new(dto.TopicId, dto.Code, dto.Name, dto.Description);
@@ -32,6 +32,6 @@ public static class ContentContractMapper
             dto.TopicCount,
             dto.TopicCodes);
 
-    public static ListResourcesResponse ToListResponse(IEnumerable<ResourceSummaryDto> dtos) =>
-        new(dtos.Select(ToResponse).ToList());
+    public static ListResourcesResponse ToListResponse(ListResourcesResult result) =>
+        new(result.Items.Select(ToResponse).ToList(), result.NextCursor);
 }

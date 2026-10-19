@@ -1,3 +1,4 @@
+using System.Data;
 using Dapper;
 using Yusay.Application.Common.Interfaces;
 using Yusay.Application.Content.Dtos;
@@ -64,8 +65,10 @@ public sealed class ResourceCatalogRepository(IDbConnectionFactory connectionFac
         int limit,
         string? cursorTitle,
         Guid? cursorResourceId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IDbTransaction? transaction = null)
     {
+
         const string sql = """
             SELECT 
                 r.resource_id, 
@@ -120,12 +123,28 @@ public sealed class ResourceCatalogRepository(IDbConnectionFactory connectionFac
             Limit = limit
         };
 
-        await using var connection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var connection = transaction?.Connection;
+        if (connection is not null)
+        {
+            var rows = await connection.QueryAsync<ResourceSummaryRow>(
+                new CommandDefinition(sql, parameters, transaction: transaction, cancellationToken: cancellationToken));
 
-        var rows = await connection.QueryAsync<ResourceSummaryRow>(
+            return rows.Select(r => new ResourceSummaryDto(
+                r.Resource_id,
+                r.Type,
+                r.Status,
+                r.Title,
+                r.Summary,
+                r.Topic_count,
+                r.Topic_codes ?? Array.Empty<string>())).ToList();
+        }
+
+        await using var openConnection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+
+        var standaloneRows = await openConnection.QueryAsync<ResourceSummaryRow>(
             new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
 
-        return rows.Select(r => new ResourceSummaryDto(
+        return standaloneRows.Select(r => new ResourceSummaryDto(
             r.Resource_id,
             r.Type,
             r.Status,
@@ -143,7 +162,7 @@ public sealed class ResourceCatalogRepository(IDbConnectionFactory connectionFac
         const string sql = """
             SELECT ar.interpretation_id
             FROM yusay.assessment_attempt aa
-            INNER JOIN yusay.assessment_result ar ON aa.attempt_id = ar.attempt_id
+            INNER JOIN yusay.assessment_result ar ON ar.attempt_id = aa.attempt_id
             WHERE aa.attempt_id = @AttemptId
               AND aa.user_id = @UserId
               AND aa.status = 'SUBMITTED';
@@ -154,6 +173,36 @@ public sealed class ResourceCatalogRepository(IDbConnectionFactory connectionFac
         return await connection.QuerySingleOrDefaultAsync<Guid?>(
             new CommandDefinition(sql, new { AttemptId = attemptId, UserId = userId }, cancellationToken: cancellationToken));
     }
+
+    public async Task<IReadOnlyList<ResourceTopicDto>> GetInterpretationTopicsAsync(
+        Guid interpretationId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT t.topic_id AS TopicId, t.code AS Code, t.name AS Name
+            FROM yusay.interpretation_topic it
+            INNER JOIN yusay.topic t ON it.topic_id = t.topic_id
+            WHERE it.interpretation_id = @InterpretationId
+            ORDER BY t.code ASC;
+            """;
+
+        var connection = transaction?.Connection;
+        if (connection is not null)
+        {
+            var rows = await connection.QueryAsync<TopicSummaryRow>(
+                new CommandDefinition(sql, new { InterpretationId = interpretationId }, transaction: transaction, cancellationToken: cancellationToken));
+
+            return rows.Select(r => new ResourceTopicDto(r.TopicId, r.Code, r.Name)).ToList();
+        }
+
+        await using var openConnection = await _connectionFactory.CreateOpenConnectionAsync(cancellationToken);
+        var openRows = await openConnection.QueryAsync<TopicSummaryRow>(
+            new CommandDefinition(sql, new { InterpretationId = interpretationId }, cancellationToken: cancellationToken));
+
+        return openRows.Select(r => new ResourceTopicDto(r.TopicId, r.Code, r.Name)).ToList();
+    }
+
 
     private sealed record ResourceRow(
         Guid Resource_id,
@@ -175,5 +224,12 @@ public sealed class ResourceCatalogRepository(IDbConnectionFactory connectionFac
         public string? Summary { get; set; }
         public int Topic_count { get; set; }
         public string[]? Topic_codes { get; set; }
+    }
+
+    private sealed class TopicSummaryRow
+    {
+        public Guid TopicId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
     }
 }

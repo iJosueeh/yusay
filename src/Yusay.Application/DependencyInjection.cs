@@ -13,6 +13,7 @@ using Yusay.Application.Assessment.Commands.UpdateInstrument;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentById;
 using Yusay.Application.Assessment.Queries.GetAdministrativeInstrumentVersionById;
 using Yusay.Application.Assessment.Queries.GetAssessmentAttempt;
+using Yusay.Application.Assessment.Queries.GetAssessmentGuidance;
 using Yusay.Application.Assessment.Queries.GetPublishedInstrumentById;
 using Yusay.Application.Assessment.Queries.ListAdministrativeInstruments;
 using Yusay.Application.Assessment.Queries.ListAssessments;
@@ -99,6 +100,7 @@ public static class DependencyInjection
         services.AddScoped<IGetAssessmentAttemptUseCase, GetAssessmentAttemptUseCase>();
         services.AddScoped<ISubmitAssessmentAttemptUseCase, SubmitAssessmentAttemptUseCase>();
         services.AddScoped<IListAssessmentsUseCase, ListAssessmentsUseCase>();
+        services.AddScoped<IGetAssessmentGuidanceUseCase, GetAssessmentGuidanceUseCase>();
         services.AddScoped<IGetTimelineUseCase, GetTimelineUseCase>();
         services.AddScoped<IGetDimensionTrendsUseCase, GetDimensionTrendsUseCase>();
         services.AddScoped<IGetInstrumentTrendsUseCase, GetInstrumentTrendsUseCase>();

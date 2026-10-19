@@ -271,6 +271,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/admin/topics",
                 "/assessments",
                 "/assessments/{attemptId}", "/assessments/{attemptId}/answers",
+                "/assessments/{attemptId}/guidance",
                 "/assessments/{attemptId}/submit",
                 "/auth/password-reset/confirm",
                 "/auth/password-reset/request", "/auth/register", "/auth/sign-in", "/auth/sign-out",

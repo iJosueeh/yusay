@@ -106,4 +106,10 @@ public interface IAssessmentAttemptRepository
         Guid attemptId,
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<AssessmentGuidanceAttemptDataDto?> GetAttemptGuidanceDataAsync(
+        Guid attemptId,
+        Guid userId,
+        IDbTransaction? transaction = null,
+        CancellationToken cancellationToken = default);
 }
