@@ -38,6 +38,9 @@ using Yusay.Application.Tracking.Queries.GetDimensionById;
 using Yusay.Application.Tracking.Queries.ListAdministrativeDimensions;
 using Yusay.Application.Tracking.Queries.ListCheckIns;
 using Yusay.Application.Tracking.Queries.ListDimensions;
+using Yusay.Application.Tracking.Queries.GetTimeline;
+using Yusay.Application.Trends.Queries.GetDimensionTrends;
+using Yusay.Application.Trends.Queries.GetInstrumentTrends;
 
 namespace Yusay.Application;
 
@@ -84,7 +87,9 @@ public static class DependencyInjection
         services.AddScoped<IGetAssessmentAttemptUseCase, GetAssessmentAttemptUseCase>();
         services.AddScoped<ISubmitAssessmentAttemptUseCase, SubmitAssessmentAttemptUseCase>();
         services.AddScoped<IListAssessmentsUseCase, ListAssessmentsUseCase>();
-        services.AddScoped<Tracking.Queries.GetTimeline.IGetTimelineUseCase, Tracking.Queries.GetTimeline.GetTimelineUseCase>();
+        services.AddScoped<IGetTimelineUseCase, GetTimelineUseCase>();
+        services.AddScoped<IGetDimensionTrendsUseCase, GetDimensionTrendsUseCase>();
+        services.AddScoped<IGetInstrumentTrendsUseCase, GetInstrumentTrendsUseCase>();
 
         return services;
     }

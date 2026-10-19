@@ -12,6 +12,8 @@ using Yusay.Infrastructure.Persistence;
 using Yusay.Infrastructure.Tracking.Repositories;
 using Yusay.Application.Assessment.Repositories;
 using Yusay.Infrastructure.Assessment.Repositories;
+using Yusay.Application.Trends.Repositories;
+using Yusay.Infrastructure.Trends.Repositories;
 
 namespace Yusay.Infrastructure;
 
@@ -44,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<IInstrumentCatalogRepository, InstrumentCatalogRepository>();
         services.AddScoped<IAssessmentAttemptRepository, AssessmentAttemptRepository>();
         services.AddScoped<ITimelineRepository, TimelineRepository>();
+        services.AddScoped<ITrendsRepository, TrendsRepository>();
 
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();
