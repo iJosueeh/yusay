@@ -284,7 +284,8 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/timeline",
                 "/topics",
                 "/trends/dimensions/{dimensionId}",
-                "/trends/instruments/{instrumentId}"
+                "/trends/instruments/{instrumentId}",
+                "/users/me"
             },
             routeNames);
 
@@ -295,6 +296,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("SignIn", ReadOperationId(paths, "/auth/sign-in", "post"));
         Assert.Equal("VerifyEmail", ReadOperationId(paths, "/auth/verify-email", "post"));
         Assert.Equal("SignOut", ReadOperationId(paths, "/auth/sign-out", "post"));
+        Assert.Equal("GetCurrentUserProfile", ReadOperationId(paths, "/users/me", "get"));
         Assert.Equal("CreateCheckIn", ReadOperationId(paths, "/check-ins", "post"));
         Assert.Equal("ListCheckIns", ReadOperationId(paths, "/check-ins", "get"));
         Assert.Equal("GetCheckInById", ReadOperationId(paths, "/check-ins/{checkInId}", "get"));
@@ -542,6 +544,13 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
             .Select(response => response.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
         Assert.Equal(new[] { "204", "400", "401", "503" }, signOutResponses);
+
+        // GET /users/me (RF-004a) documenta exactamente sus códigos reales: 200 y ProblemDetails 401/503
+        var userProfileResponses = paths.GetProperty("/users/me").GetProperty("get")
+            .GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "200", "401", "503" }, userProfileResponses);
 
         // El contrato de solicitud sigue siendo JSON con el esquema del DTO
         var requestBody = paths.GetProperty("/auth/register").GetProperty("post").GetProperty("requestBody");

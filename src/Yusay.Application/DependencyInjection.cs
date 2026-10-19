@@ -24,6 +24,7 @@ using Yusay.Application.Identity.Commands.ResetPassword;
 using Yusay.Application.Identity.Commands.SignIn;
 using Yusay.Application.Identity.Commands.SignOut;
 using Yusay.Application.Identity.Commands.VerifyEmail;
+using Yusay.Application.Identity.Queries.GetUserProfile;
 using Yusay.Application.Identity.Queries.ValidateAccessToken;
 using Yusay.Application.Tracking.Commands.ActivateDimensionVersion;
 using Yusay.Application.Tracking.Commands.CreateCheckIn;
@@ -79,6 +80,7 @@ public static class DependencyInjection
         services.AddScoped<ISignInUseCase, SignInUseCase>();
         services.AddScoped<ISignOutUseCase, SignOutUseCase>();
         services.AddScoped<IValidateAccessTokenUseCase, ValidateAccessTokenUseCase>();
+        services.AddScoped<IGetUserProfileUseCase, GetUserProfileUseCase>();
         services.AddScoped<ICreateCheckInUseCase, CreateCheckInUseCase>();
         services.AddScoped<IGetCheckInByIdUseCase, GetCheckInByIdUseCase>();
         services.AddScoped<IUpdateCheckInUseCase, UpdateCheckInUseCase>();
