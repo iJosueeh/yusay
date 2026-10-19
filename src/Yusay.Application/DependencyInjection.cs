@@ -41,6 +41,16 @@ using Yusay.Application.Tracking.Queries.ListDimensions;
 using Yusay.Application.Tracking.Queries.GetTimeline;
 using Yusay.Application.Trends.Queries.GetDimensionTrends;
 using Yusay.Application.Trends.Queries.GetInstrumentTrends;
+using Yusay.Application.Content.Commands.AddResourceTopic;
+using Yusay.Application.Content.Commands.CreateResource;
+using Yusay.Application.Content.Commands.CreateTopic;
+using Yusay.Application.Content.Commands.PublishResource;
+using Yusay.Application.Content.Commands.RemoveResourceTopic;
+using Yusay.Application.Content.Commands.RetireResource;
+using Yusay.Application.Content.Commands.UpdateResource;
+using Yusay.Application.Content.Queries.GetResourceById;
+using Yusay.Application.Content.Queries.ListResources;
+using Yusay.Application.Content.Queries.ListTopics;
 
 namespace Yusay.Application;
 
@@ -90,6 +100,16 @@ public static class DependencyInjection
         services.AddScoped<IGetTimelineUseCase, GetTimelineUseCase>();
         services.AddScoped<IGetDimensionTrendsUseCase, GetDimensionTrendsUseCase>();
         services.AddScoped<IGetInstrumentTrendsUseCase, GetInstrumentTrendsUseCase>();
+        services.AddScoped<ICreateTopicUseCase, CreateTopicUseCase>();
+        services.AddScoped<IListTopicsUseCase, ListTopicsUseCase>();
+        services.AddScoped<ICreateResourceUseCase, CreateResourceUseCase>();
+        services.AddScoped<IUpdateResourceUseCase, UpdateResourceUseCase>();
+        services.AddScoped<IPublishResourceUseCase, PublishResourceUseCase>();
+        services.AddScoped<IRetireResourceUseCase, RetireResourceUseCase>();
+        services.AddScoped<IAddResourceTopicUseCase, AddResourceTopicUseCase>();
+        services.AddScoped<IRemoveResourceTopicUseCase, RemoveResourceTopicUseCase>();
+        services.AddScoped<IGetResourceByIdUseCase, GetResourceByIdUseCase>();
+        services.AddScoped<IListResourcesUseCase, ListResourcesUseCase>();
 
         return services;
     }

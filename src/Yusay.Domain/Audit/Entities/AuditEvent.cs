@@ -664,6 +664,270 @@ public sealed class AuditEvent
             metadata: null);
     }
 
+    public static AuditEvent CreateTopicCreated(
+        Guid topicId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (topicId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del tema para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_CREATED",
+            targetType: "TOPIC",
+            targetIdentifier: topicId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateResourceCreated(
+        Guid resourceId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (resourceId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del recurso para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_CREATED",
+            targetType: "RESOURCE",
+            targetIdentifier: resourceId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    private static readonly IReadOnlyCollection<string> ResourceCatalogChangedFields =
+        new HashSet<string>(StringComparer.Ordinal) { "title", "summary", "body", "external_url" };
+
+    private static readonly IReadOnlyCollection<string> AllowedCorrectionKinds =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "SPELLING",
+            "PUNCTUATION",
+            "FORMAT",
+            "SURFACE_CLARITY",
+            "SAME_CONTENT_LINK_REPAIR"
+        };
+
+    public static AuditEvent CreateResourceUpdated(
+        Guid resourceId,
+        Guid administratorUserId,
+        IReadOnlyList<string> changedFields,
+        string? correctionKind = null,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (resourceId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del recurso para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        if (changedFields is null || changedFields.Count == 0)
+        {
+            throw new DomainException(
+                "La lista de campos modificados (changed_fields) de una edición de recurso no puede estar vacía.");
+        }
+
+        foreach (var field in changedFields)
+        {
+            if (!ResourceCatalogChangedFields.Contains(field))
+            {
+                throw new DomainException(
+                    $"El campo '{field}' no está permitido en changed_fields de una edición de RESOURCE (lista cerrada: title, summary, body, external_url).");
+            }
+        }
+
+        if (correctionKind != null && !AllowedCorrectionKinds.Contains(correctionKind))
+        {
+            throw new DomainException(
+                $"El tipo de corrección '{correctionKind}' no está permitido en una edición de RESOURCE.");
+        }
+
+        string metadata;
+        if (correctionKind != null)
+        {
+            metadata = JsonSerializer.Serialize(new
+            {
+                changed_fields = changedFields,
+                correction_kind = correctionKind
+            });
+        }
+        else
+        {
+            metadata = JsonSerializer.Serialize(new
+            {
+                changed_fields = changedFields
+            });
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "CATALOG_UPDATED",
+            targetType: "RESOURCE",
+            targetIdentifier: resourceId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: metadata);
+    }
+
+    public static AuditEvent CreateResourcePublished(
+        Guid resourceId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (resourceId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del recurso para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "RESOURCE_PUBLISHED",
+            targetType: "RESOURCE",
+            targetIdentifier: resourceId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateResourceRetired(
+        Guid resourceId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (resourceId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del recurso para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "RESOURCE_RETIRED",
+            targetType: "RESOURCE",
+            targetIdentifier: resourceId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
+    public static AuditEvent CreateEditorialAssociationAdded(
+        Guid resourceId,
+        Guid topicId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (resourceId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del recurso para auditoría no puede ser vacío.");
+        }
+
+        if (topicId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del tema para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        var metadata = JsonSerializer.Serialize(new
+        {
+            topic_id = topicId.ToString()
+        });
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "EDITORIAL_ASSOCIATION_ADDED",
+            targetType: "RESOURCE",
+            targetIdentifier: resourceId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: metadata);
+    }
+
+    public static AuditEvent CreateEditorialAssociationRemoved(
+        Guid resourceId,
+        Guid topicId,
+        Guid administratorUserId,
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        if (resourceId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del recurso para auditoría no puede ser vacío.");
+        }
+
+        if (topicId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del tema para auditoría no puede ser vacío.");
+        }
+
+        if (administratorUserId == Guid.Empty)
+        {
+            throw new DomainException("El identificador del administrador para auditoría no puede ser vacío.");
+        }
+
+        var metadata = JsonSerializer.Serialize(new
+        {
+            topic_id = topicId.ToString()
+        });
+
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: administratorUserId,
+            actorKind: "ADMINISTRATOR",
+            action: "EDITORIAL_ASSOCIATION_REMOVED",
+            targetType: "RESOURCE",
+            targetIdentifier: resourceId.ToString(),
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: metadata);
+    }
+
     public static AuditEvent Rehydrate(
         Guid auditEventId,
         Guid? actorUserId,

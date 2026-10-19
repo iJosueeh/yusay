@@ -263,6 +263,12 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/admin/instruments/{instrumentId}/versions/{versionId}/publish",
                 "/admin/instruments/{instrumentId}/versions/{versionId}/retire",
                 "/admin/instruments/{instrumentId}/versions/{versionId}/return-to-draft",
+                "/admin/resources",
+                "/admin/resources/{resourceId}",
+                "/admin/resources/{resourceId}/publish",
+                "/admin/resources/{resourceId}/retire",
+                "/admin/resources/{resourceId}/topics/{topicId}",
+                "/admin/topics",
                 "/assessments",
                 "/assessments/{attemptId}", "/assessments/{attemptId}/answers",
                 "/assessments/{attemptId}/submit",
@@ -329,6 +335,18 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("GetTimeline", ReadOperationId(paths, "/timeline", "get"));
         Assert.Equal("GetDimensionTrends", ReadOperationId(paths, "/trends/dimensions/{dimensionId}", "get"));
         Assert.Equal("GetInstrumentTrends", ReadOperationId(paths, "/trends/instruments/{instrumentId}", "get"));
+
+        // Administración de Contenido (RF-023)
+        Assert.Equal("ListAdministrativeTopics", ReadOperationId(paths, "/admin/topics", "get"));
+        Assert.Equal("CreateTopic", ReadOperationId(paths, "/admin/topics", "post"));
+        Assert.Equal("ListAdministrativeResources", ReadOperationId(paths, "/admin/resources", "get"));
+        Assert.Equal("GetAdministrativeResourceById", ReadOperationId(paths, "/admin/resources/{resourceId}", "get"));
+        Assert.Equal("CreateResource", ReadOperationId(paths, "/admin/resources", "post"));
+        Assert.Equal("UpdateResource", ReadOperationId(paths, "/admin/resources/{resourceId}", "put"));
+        Assert.Equal("PublishResource", ReadOperationId(paths, "/admin/resources/{resourceId}/publish", "post"));
+        Assert.Equal("RetireResource", ReadOperationId(paths, "/admin/resources/{resourceId}/retire", "post"));
+        Assert.Equal("AddResourceTopic", ReadOperationId(paths, "/admin/resources/{resourceId}/topics/{topicId}", "post"));
+        Assert.Equal("RemoveResourceTopic", ReadOperationId(paths, "/admin/resources/{resourceId}/topics/{topicId}", "delete"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)
