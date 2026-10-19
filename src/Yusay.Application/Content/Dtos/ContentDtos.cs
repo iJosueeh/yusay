@@ -29,3 +29,7 @@ public sealed record ResourceSummaryDto(
     string? Summary,
     int TopicCount,
     IReadOnlyList<string> TopicCodes);
+
+public sealed record ListResourcesResult(
+    IReadOnlyList<ResourceSummaryDto> Items,
+    string? NextCursor);

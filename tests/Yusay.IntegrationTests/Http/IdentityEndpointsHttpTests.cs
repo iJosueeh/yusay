@@ -278,7 +278,10 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
                 "/dimensions/{dimensionId}", "/health",
                 "/instruments", "/instruments/{instrumentId}",
                 "/instruments/{instrumentId}/attempts",
+                "/resources",
+                "/resources/{resourceId}",
                 "/timeline",
+                "/topics",
                 "/trends/dimensions/{dimensionId}",
                 "/trends/instruments/{instrumentId}"
             },
@@ -347,6 +350,11 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("RetireResource", ReadOperationId(paths, "/admin/resources/{resourceId}/retire", "post"));
         Assert.Equal("AddResourceTopic", ReadOperationId(paths, "/admin/resources/{resourceId}/topics/{topicId}", "post"));
         Assert.Equal("RemoveResourceTopic", ReadOperationId(paths, "/admin/resources/{resourceId}/topics/{topicId}", "delete"));
+
+        // Consulta de Contenido (RF-022)
+        Assert.Equal("ListPublishedTopics", ReadOperationId(paths, "/topics", "get"));
+        Assert.Equal("ListPublishedResources", ReadOperationId(paths, "/resources", "get"));
+        Assert.Equal("GetPublishedResourceById", ReadOperationId(paths, "/resources/{resourceId}", "get"));
 
         // PUT documenta exactamente sus códigos reales: 200 con representación actualizada y
         // ProblemDetails 400/401/404/409/503 (OQ-DOM-008: 404 uniforme y 409 optimista)

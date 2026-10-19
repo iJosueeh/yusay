@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<ITrendsRepository, TrendsRepository>();
         services.AddScoped<ITopicRepository, TopicRepository>();
         services.AddScoped<IResourceAdministrationRepository, ResourceAdministrationRepository>();
+        services.AddScoped<IResourceCatalogRepository, ResourceCatalogRepository>();
 
         services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
         services.AddSingleton<ISecureTokenService, SecureTokenService>();

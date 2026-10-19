@@ -48,7 +48,9 @@ using Yusay.Application.Content.Commands.PublishResource;
 using Yusay.Application.Content.Commands.RemoveResourceTopic;
 using Yusay.Application.Content.Commands.RetireResource;
 using Yusay.Application.Content.Commands.UpdateResource;
+using Yusay.Application.Content.Queries.GetPublishedResourceById;
 using Yusay.Application.Content.Queries.GetResourceById;
+using Yusay.Application.Content.Queries.ListPublishedResources;
 using Yusay.Application.Content.Queries.ListResources;
 using Yusay.Application.Content.Queries.ListTopics;
 
@@ -110,6 +112,8 @@ public static class DependencyInjection
         services.AddScoped<IRemoveResourceTopicUseCase, RemoveResourceTopicUseCase>();
         services.AddScoped<IGetResourceByIdUseCase, GetResourceByIdUseCase>();
         services.AddScoped<IListResourcesUseCase, ListResourcesUseCase>();
+        services.AddScoped<IGetPublishedResourceByIdUseCase, GetPublishedResourceByIdUseCase>();
+        services.AddScoped<IListPublishedResourcesUseCase, ListPublishedResourcesUseCase>();
 
         return services;
     }
