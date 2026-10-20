@@ -18,6 +18,7 @@ using Yusay.Application.Assessment.Queries.GetPublishedInstrumentById;
 using Yusay.Application.Assessment.Queries.ListAdministrativeInstruments;
 using Yusay.Application.Assessment.Queries.ListAssessments;
 using Yusay.Application.Assessment.Queries.ListPublishedInstruments;
+using Yusay.Application.Identity.Commands.DeleteUserAccount;
 using Yusay.Application.Identity.Commands.RegisterUser;
 using Yusay.Application.Identity.Commands.RequestPasswordReset;
 using Yusay.Application.Identity.Commands.ResetPassword;
@@ -79,6 +80,7 @@ public static class DependencyInjection
         services.AddScoped<IResetPasswordUseCase, ResetPasswordUseCase>();
         services.AddScoped<ISignInUseCase, SignInUseCase>();
         services.AddScoped<ISignOutUseCase, SignOutUseCase>();
+        services.AddScoped<IDeleteUserAccountUseCase, DeleteUserAccountUseCase>();
         services.AddScoped<IValidateAccessTokenUseCase, ValidateAccessTokenUseCase>();
         services.AddScoped<IGetUserProfileUseCase, GetUserProfileUseCase>();
         services.AddScoped<ICreateCheckInUseCase, CreateCheckInUseCase>();

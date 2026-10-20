@@ -177,8 +177,18 @@ public sealed class FakeAuditEventRepository : IAuditEventRepository
     /// <summary>Inyecta un fallo de persistencia en la próxima inserción (p. ej. PostgreSQL caído).</summary>
     public bool FailNextAdd { get; set; }
 
+    /// <summary>Permite inyectar una excepción específica (p. ej. OperationCanceledException u OutOfMemoryException).</summary>
+    public Exception? CustomExceptionToThrow { get; set; }
+
     public Task AddAsync(AuditEvent auditEvent, DbTransaction? transaction = null, CancellationToken cancellationToken = default)
     {
+        if (CustomExceptionToThrow != null)
+        {
+            var ex = CustomExceptionToThrow;
+            CustomExceptionToThrow = null;
+            throw ex;
+        }
+
         if (FailNextAdd)
         {
             FailNextAdd = false;

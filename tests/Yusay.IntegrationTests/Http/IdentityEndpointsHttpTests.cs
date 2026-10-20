@@ -297,6 +297,7 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
         Assert.Equal("VerifyEmail", ReadOperationId(paths, "/auth/verify-email", "post"));
         Assert.Equal("SignOut", ReadOperationId(paths, "/auth/sign-out", "post"));
         Assert.Equal("GetCurrentUserProfile", ReadOperationId(paths, "/users/me", "get"));
+        Assert.Equal("DeleteCurrentUserAccount", ReadOperationId(paths, "/users/me", "delete"));
         Assert.Equal("CreateCheckIn", ReadOperationId(paths, "/check-ins", "post"));
         Assert.Equal("ListCheckIns", ReadOperationId(paths, "/check-ins", "get"));
         Assert.Equal("GetCheckInById", ReadOperationId(paths, "/check-ins/{checkInId}", "get"));
@@ -551,6 +552,13 @@ public sealed class IdentityEndpointsHttpTests : IDisposable
             .Select(response => response.Name)
             .OrderBy(name => name, StringComparer.Ordinal);
         Assert.Equal(new[] { "200", "401", "503" }, userProfileResponses);
+
+        // DELETE /users/me (RF-004b) documenta exactamente sus códigos reales: 204 y ProblemDetails 400/401/503
+        var deleteUserResponses = paths.GetProperty("/users/me").GetProperty("delete")
+            .GetProperty("responses").EnumerateObject()
+            .Select(response => response.Name)
+            .OrderBy(name => name, StringComparer.Ordinal);
+        Assert.Equal(new[] { "204", "400", "401", "503" }, deleteUserResponses);
 
         // El contrato de solicitud sigue siendo JSON con el esquema del DTO
         var requestBody = paths.GetProperty("/auth/register").GetProperty("post").GetProperty("requestBody");

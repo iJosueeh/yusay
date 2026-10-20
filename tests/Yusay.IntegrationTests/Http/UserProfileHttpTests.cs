@@ -12,8 +12,12 @@ using Yusay.Infrastructure.Audit.Repositories;
 using Yusay.Infrastructure.Emailing;
 using Yusay.Infrastructure.Identity.Repositories;
 using Yusay.Infrastructure.Identity.Services;
+using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Yusay.Infrastructure.Persistence;
 using Yusay.IntegrationTests.Infrastructure;
+using Yusay.Application.Common.Interfaces;
 
 namespace Yusay.IntegrationTests.Http;
 
@@ -276,5 +280,378 @@ public sealed class UserProfileHttpTests : IAsyncLifetime
         }
 
         return client.SendAsync(request);
+    }
+
+    private static Task<HttpResponseMessage> SendDeleteAsync(HttpClient client, string path, object? body = null, string? accessToken = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, path);
+        if (accessToken is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        return client.SendAsync(request);
+    }
+
+    // ==========================================================================================
+    // Pruebas de integración HTTP de RF-004b (DELETE /users/me)
+    // ==========================================================================================
+
+    [Fact]
+    public async Task DeleteAccount_WithoutToken_ShouldReturn401Unauthorized()
+    {
+        // Arrange
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        // Act
+        var response = await SendDeleteAsync(client, "/users/me", new { password = ValidPassword });
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_WithEmptyPassword_ShouldReturn400BadRequest()
+    {
+        // Arrange
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        string email = $"del_empty_pass_{Guid.NewGuid():N}@yusay.local";
+        var (_, accessToken) = await CreateSessionAsync(email);
+
+        // Act
+        var response = await SendDeleteAsync(client, "/users/me", new { password = "" }, accessToken);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_WithWrongPassword_ShouldReturn401Unauthorized()
+    {
+        // Arrange
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        string email = $"del_wrong_pass_{Guid.NewGuid():N}@yusay.local";
+        var (userId, accessToken) = await CreateSessionAsync(email);
+
+        // Act
+        var response = await SendDeleteAsync(client, "/users/me", new { password = "WrongPassword#999" }, accessToken);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        // La cuenta debe seguir intacta en BD
+        await using var conn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var exists = await conn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.user_account WHERE user_id = @UserId",
+            new { UserId = userId });
+        Assert.Equal(1, exists);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_WithValidPassword_ShouldReturn204AndPurgePersonalData()
+    {
+        // Arrange
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        string email = $"del_success_{Guid.NewGuid():N}@yusay.local";
+        var (userId, accessToken) = await CreateSessionAsync(email);
+
+        // Act
+        var response = await SendDeleteAsync(client, "/users/me", new { password = ValidPassword }, accessToken);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        // Comprobar purga física en PostgreSQL mediante cascadas
+        await using var conn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+
+        var userCount = await conn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.user_account WHERE user_id = @UserId", new { UserId = userId });
+        Assert.Equal(0, userCount);
+
+        var credCount = await conn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.user_credential WHERE user_id = @UserId", new { UserId = userId });
+        Assert.Equal(0, credCount);
+
+        var tokenCount = await conn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.email_verification_token WHERE user_id = @UserId", new { UserId = userId });
+        Assert.Equal(0, tokenCount);
+
+        // Peticiones subsecuentes con el mismo token deben ser rechazadas (401)
+        var nextGet = await SendGetAsync(client, "/users/me", accessToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, nextGet.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_ShouldDisassociateAuditEvents()
+    {
+        // Arrange
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        string email = $"del_disassociate_{Guid.NewGuid():N}@yusay.local";
+        var (userId, accessToken) = await CreateSessionAsync(email);
+
+        // Verificar existencia previa de eventos de auditoría vinculados al usuario
+        await using (var conn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync())
+        {
+            var priorTargetCount = await conn.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM yusay.audit_event WHERE target_identifier = @TargetId",
+                new { TargetId = userId.ToString() });
+            Assert.True(priorTargetCount > 0, "Deben existir eventos previos con target_identifier del usuario.");
+        }
+
+        // Act: suprimir la cuenta
+        var response = await SendDeleteAsync(client, "/users/me", new { password = ValidPassword }, accessToken);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        // Assert: comprobar desvinculación tras supresión
+        await using (var conn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync())
+        {
+            // Trigger V021 desvinculó target_identifier
+            var targetCount = await conn.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM yusay.audit_event WHERE target_identifier = @TargetId",
+                new { TargetId = userId.ToString() });
+            Assert.Equal(0, targetCount);
+
+            // FK ON DELETE SET NULL desvinculó actor_user_id
+            var actorCount = await conn.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM yusay.audit_event WHERE actor_user_id = @UserId",
+                new { UserId = userId });
+            Assert.Equal(0, actorCount);
+
+            // Evento USER_DELETED emitido conforme a norma
+            var userDeletedRow = await conn.QuerySingleOrDefaultAsync<dynamic>(
+                "SELECT * FROM yusay.audit_event WHERE action = 'USER_DELETED' ORDER BY occurred_at DESC LIMIT 1");
+            Assert.NotNull(userDeletedRow);
+            var rowDict = (IDictionary<string, object?>)userDeletedRow!;
+            Assert.Equal("USER", rowDict["actor_kind"]?.ToString());
+            Assert.Null(rowDict["actor_user_id"]);
+            Assert.Equal("USER", rowDict["target_type"]?.ToString());
+            Assert.Null(rowDict["target_identifier"]);
+            Assert.Null(rowDict["metadata"]);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAccount_ShouldPreserveLeastPrivilegesOnAuditEvent()
+    {
+        // Arrange: conectarse como yusay_app
+        var appConnStr = _fixture.BuildRoleConnectionString("yusay_app");
+        await using var conn = new NpgsqlConnection(appConnStr);
+        await conn.OpenAsync();
+
+        // 1. yusay_app no puede ejecutar UPDATE manual sobre audit_event (V015 blindado)
+        var updateEx = await Assert.ThrowsAsync<PostgresException>(() =>
+            conn.ExecuteAsync("UPDATE yusay.audit_event SET target_identifier = 'illegal' WHERE true;"));
+        Assert.Equal("42501", updateEx.SqlState);
+
+        // 2. yusay_app no puede ejecutar DELETE manual sobre audit_event (V015 blindado)
+        var deleteEx = await Assert.ThrowsAsync<PostgresException>(() =>
+            conn.ExecuteAsync("DELETE FROM yusay.audit_event;"));
+        Assert.Equal("42501", deleteEx.SqlState);
+
+        // 3. yusay_app no puede invocar directamente la función trigger (REVOKE ALL FROM PUBLIC, sin GRANT a yusay_app)
+        var executeEx = await Assert.ThrowsAsync<PostgresException>(() =>
+            conn.ExecuteAsync("SELECT yusay.fn_disassociate_audit_events_on_user_account_deletion();"));
+        Assert.Equal("42501", executeEx.SqlState);
+
+        // 4. Verificar configuración de seguridad en pg_proc (SECURITY DEFINER y search_path seguro)
+        await using var verifyConn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var (isSecDef, proConfig, hasExecutePrivilege) = await verifyConn.QuerySingleAsync<(bool, string[], bool)>(
+            @"SELECT p.prosecdef, p.proconfig,
+                     has_function_privilege('yusay_app', 'yusay.fn_disassociate_audit_events_on_user_account_deletion()', 'EXECUTE')
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'yusay' AND p.proname = 'fn_disassociate_audit_events_on_user_account_deletion';");
+
+        Assert.True(isSecDef, "La función debe ser SECURITY DEFINER.");
+        Assert.Contains("search_path=pg_catalog, pg_temp", proConfig);
+        Assert.False(hasExecutePrivilege, "yusay_app NO debe tener privilegios EXECUTE directos sobre la función.");
+
+        // 5. El trigger se dispara exitosamente cuando yusay_app ejecuta DELETE en user_account
+        var testUserId = Guid.NewGuid();
+        await verifyConn.ExecuteAsync(
+            @"INSERT INTO yusay.user_account (user_id, email, created_at, status, adult_confirmed_at)
+              VALUES (@UserId, @Email, NOW(), 'ACTIVE', NOW());
+              INSERT INTO yusay.audit_event (audit_event_id, actor_kind, action, target_type, target_identifier, occurred_at)
+              VALUES (gen_random_uuid(), 'USER', 'USER_REGISTERED', 'USER', @TargetId, NOW());",
+            new { UserId = testUserId, Email = $"priv_{testUserId:N}@yusay.local", TargetId = testUserId.ToString() });
+
+        var rowsDeleted = await conn.ExecuteAsync(
+            "DELETE FROM yusay.user_account WHERE user_id = @UserId",
+            new { UserId = testUserId });
+        Assert.Equal(1, rowsDeleted);
+
+        var remainingCount = await verifyConn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.audit_event WHERE target_identifier = @TargetId",
+            new { TargetId = testUserId.ToString() });
+        Assert.Equal(0, remainingCount);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_WhenAuditInsertFails_ShouldStillDeleteAccountUnderDpTrans001()
+    {
+        // Arrange: factory con repositorio de auditoría que falla en USER_DELETED
+        using var factory = CreateFactoryWithFailingAudit();
+        using var client = factory.CreateClient();
+
+        string email = $"del_dp_trans_{Guid.NewGuid():N}@yusay.local";
+        var (userId, accessToken) = await CreateSessionAsync(email);
+
+        // Act
+        var response = await SendDeleteAsync(client, "/users/me", new { password = ValidPassword }, accessToken);
+
+        // Assert: 204 exitoso a pesar del fallo en auditoría (DP-TRANS-001)
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        // La cuenta fue eliminada físicamente de PostgreSQL
+        await using var conn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var exists = await conn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.user_account WHERE user_id = @UserId",
+            new { UserId = userId });
+        Assert.Equal(0, exists);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_WhenRedisFails_ShouldStillDeleteAccountAndBlockSubsequentRequests()
+    {
+        // Arrange: WebApplicationFactory donde RevokeAsync en Redis falla post-commit
+        using var factory = CreateFactoryWithFailingRedisRevocation();
+        using var client = factory.CreateClient();
+
+        string email = $"del_redis_fail_{Guid.NewGuid():N}@yusay.local";
+        var (userId, accessToken) = await CreateSessionAsync(email);
+
+        // Act
+        var response = await SendDeleteAsync(client, "/users/me", new { password = ValidPassword }, accessToken);
+
+        // Assert: 204 exitoso
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        // La cuenta fue eliminada en PostgreSQL
+        await using var conn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var exists = await conn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.user_account WHERE user_id = @UserId",
+            new { UserId = userId });
+        Assert.Equal(0, exists);
+
+        // Siguiente petición es rechazada con 401 porque el usuario ya no existe en BD
+        var nextGet = await SendGetAsync(client, "/users/me", accessToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, nextGet.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAccount_ConcurrentDeletions_ShouldHandleGracefully()
+    {
+        // Arrange
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        string email = $"del_concurrent_{Guid.NewGuid():N}@yusay.local";
+        var (userId, accessToken) = await CreateSessionAsync(email);
+
+        // Act: dos peticiones de eliminación concurrentes con el mismo token
+        var task1 = SendDeleteAsync(client, "/users/me", new { password = ValidPassword }, accessToken);
+        var task2 = SendDeleteAsync(client, "/users/me", new { password = ValidPassword }, accessToken);
+
+        var responses = await Task.WhenAll(task1, task2);
+
+        // Assert: al menos una debe responder 204 No Content
+        Assert.Contains(responses, r => r.StatusCode == HttpStatusCode.NoContent);
+
+        // Ninguna debe responder 500
+        Assert.DoesNotContain(responses, r => r.StatusCode == HttpStatusCode.InternalServerError);
+
+        // La cuenta está eliminada
+        await using var conn = await _fixture.ConnectionFactory.CreateOpenConnectionAsync();
+        var exists = await conn.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM yusay.user_account WHERE user_id = @UserId",
+            new { UserId = userId });
+        Assert.Equal(0, exists);
+    }
+
+    private WebApplicationFactory<Program> CreateFactoryWithFailingAudit() =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Development");
+            builder.UseSetting("DATABASE_URL", _fixture.ConnectionString);
+            builder.UseSetting("JWT_SECRET", TestJwtSecret);
+            builder.UseSetting("REDIS_HOST", _redis.Host);
+            builder.UseSetting("REDIS_PORT", _redis.MappedPort.ToString());
+            builder.ConfigureServices(services =>
+            {
+                var descriptor = services.FirstOrDefault(s => s.ServiceType == typeof(IAuditEventRepository));
+                if (descriptor != null)
+                {
+                    services.Remove(descriptor);
+                }
+                services.AddScoped<IAuditEventRepository>(sp =>
+                    new FailingUserDeletedAuditRepository(
+                        new AuditEventRepository(sp.GetRequiredService<IDbConnectionFactory>())));
+            });
+        });
+
+    private WebApplicationFactory<Program> CreateFactoryWithFailingRedisRevocation() =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Development");
+            builder.UseSetting("DATABASE_URL", _fixture.ConnectionString);
+            builder.UseSetting("JWT_SECRET", TestJwtSecret);
+            builder.UseSetting("REDIS_HOST", _redis.Host);
+            builder.UseSetting("REDIS_PORT", _redis.MappedPort.ToString());
+            builder.ConfigureServices(services =>
+            {
+                var descriptor = services.FirstOrDefault(s => s.ServiceType == typeof(IAccessTokenDenylist));
+                if (descriptor != null)
+                {
+                    services.Remove(descriptor);
+                }
+                services.AddSingleton<IAccessTokenDenylist, FailingOnRevokeAccessTokenDenylist>();
+            });
+        });
+
+    private sealed class FailingUserDeletedAuditRepository(AuditEventRepository inner) : IAuditEventRepository
+    {
+        private readonly AuditEventRepository _inner = inner;
+
+        public Task AddAsync(
+            Yusay.Domain.Audit.Entities.AuditEvent auditEvent,
+            System.Data.Common.DbTransaction? transaction = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (auditEvent.Action == "USER_DELETED")
+            {
+                throw new NpgsqlException("Simulación de fallo de cuota/almacenamiento en audit_event.");
+            }
+
+            return _inner.AddAsync(auditEvent, transaction, cancellationToken);
+        }
+    }
+
+    private sealed class FailingOnRevokeAccessTokenDenylist : IAccessTokenDenylist
+    {
+        public Task<bool> IsRevokedAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<bool> RevokeAsync(string tokenId, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("Simulación de fallo de conexión o tiempo de espera en Redis.");
+        }
     }
 }

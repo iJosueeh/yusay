@@ -198,6 +198,21 @@ public sealed class AuditEvent
             metadata: null);
     }
 
+    public static AuditEvent CreateUserDeleted(
+        DateTimeOffset? occurredAt = null,
+        Guid? auditEventId = null)
+    {
+        return new AuditEvent(
+            auditEventId: auditEventId ?? Guid.NewGuid(),
+            actorUserId: null,
+            actorKind: "USER",
+            action: "USER_DELETED",
+            targetType: "USER",
+            targetIdentifier: null,
+            occurredAt: occurredAt ?? DateTimeOffset.UtcNow,
+            metadata: null);
+    }
+
     private static readonly IReadOnlyCollection<string> DimensionCatalogChangedFields =
         new HashSet<string>(StringComparer.Ordinal) { "name", "description" };
 
