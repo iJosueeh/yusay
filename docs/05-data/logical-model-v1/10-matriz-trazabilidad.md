@@ -21,7 +21,7 @@ Las referencias a OQ-DATA señalan trazabilidad histórica: el hecho de recibir 
 
 | N.º / relación aprobada | Antecedente conceptual | Trazabilidad | Resultado del contraste |
 | --- | --- | --- | --- |
-| [1. USER](especificacion-maestra-v1.0.md#1-user) | User — Identity | RF-001, RF-002, RF-004; AJ-04; VF-02 | Directa. AJ-04 precisa espacios exteriores, dominio normalizado, unicidad sin distinción de mayúsculas, sin reglas de proveedores ni cambio de correo; confirmación adulta, estados y verificación. |
+| [1. USER](especificacion-maestra-v1.0.md#1-user) | User — Identity | RF-001, RF-002, RF-004 (RF-004a, RF-004b); AJ-04; VF-02, VF-04 | Directa. AJ-04 precisa espacios exteriores, dominio normalizado, unicidad sin distinción de mayúsculas, sin reglas de proveedores ni cambio de correo; confirmación adulta, estados y verificación. RF-004 formaliza consulta de solo lectura (RF-004a), supresión transaccional y desvinculación (RF-004b, VF-04); presentación de privacidad en frontend pendiente. |
 | [2. USER_CREDENTIAL](especificacion-maestra-v1.0.md#2-user_credential) | Acceso de User; sin objeto separado confirmado | RF-002, RF-003; AJ-04; VF-01 | Descomposición lógica de credenciales; PK/FK user_id aprobada, sin nueva raíz conceptual. |
 | [3. ADMINISTRATOR](especificacion-maestra-v1.0.md#3-administrator) | Administrator — actor, no raíz adicional | RN-026; AJ-04; VF-01 | Representa habilitación administrativa mediante PK/FK a USER; no concede acceso privado. |
 | [4. EMAIL_VERIFICATION_TOKEN](especificacion-maestra-v1.0.md#4-email_verification_token) | Verificación de correo — capacidad Identity | RF-001; AJ-04; VF-04, VF-05 | Relación técnica lógica aprobada; hash, expiración y eliminación al consumir, sin consumed_at. |

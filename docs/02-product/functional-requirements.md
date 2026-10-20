@@ -24,9 +24,30 @@ Baseline documental derivado del [alcance](scope.md) y la [definición del produ
 
 ### RF-004
 - **Name:** Perfil y privacidad.
-- **Description:** Permitir consultar y actualizar el perfil y utilizar controles básicos de privacidad; sus campos y acciones quedan abiertos.
+- **Description:** Permitir al usuario autenticado consultar en modo solo lectura los datos de su perfil (RF-004a), ejercer el derecho a la supresión de la cuenta con validación de contraseña actual y desvinculación de auditoría (RF-004b), y acceder a la información de privacidad desde la interfaz de usuario. Las capacidades backend RF-004a y RF-004b están implementadas; la presentación de privacidad en frontend está pendiente.
 - **Priority:** MUST.
-- **Status:** PROPOSED.
+- **Status:** ACCEPTED.
+
+#### Criterios de aceptación
+
+- **CA-004-01 (Consulta de perfil — RF-004a):**
+  - Dado un usuario autenticado con JWT válido, cuando invoca `GET /users/me`, obtiene código 200 con exactamente seis campos: `userId`, `email`, `emailVerified`, `createdAt`, `adultConfirmedAt` y `status`.
+  - La respuesta no expone credenciales, roles, tokens ni datos de bienestar.
+  - Peticiones no autenticadas devuelven 401 Unauthorized.
+  - No se generan eventos de auditoría por esta consulta.
+
+- **CA-004-02 (Perfil de solo lectura en MVP — OQ-PROD-009):**
+  - El perfil no admite operaciones de actualización, edición parcial ni modificación de correo electrónico (conforme a la invariante AJ-04).
+  - No se añaden campos adicionales al perfil en el alcance del MVP.
+
+- **CA-004-03 (Supresión de cuenta y desvinculación — RF-004b / OQ-PROD-010):**
+  - Dado un usuario autenticado, cuando envía `DELETE /users/me` con su contraseña actual correcta en el cuerpo de la petición, se eliminan físicamente su registro en `user_account` y registros dependientes, desvinculando inmediatamente las referencias en `audit_event` mediante trigger V021 (`target_identifier = NULL`), emitiendo `USER_DELETED` disociado y respondiendo 204 No Content.
+  - Si la contraseña es errónea o falta, responde 401 Unauthorized o 400 Bad Request y no altera los datos.
+  - La supresión física en base de datos se confirma aun ante fallos recuperables al persistir `USER_DELETED` (aislamiento SAVEPOINT conforme a DP-TRANS-001).
+  - Tras el commit, se intenta la revocación de sesión en Redis; fallos posteriores de Redis no revierten la supresión y cualquier solicitud subsiguiente es rechazada con 401 Unauthorized por la ausencia de la cuenta.
+
+- **CA-004-04 (Información de privacidad en frontend — OQ-PROD-010):**
+  - La interfaz de usuario frontend debe proporcionar un acceso visible y directo para consultar los términos e información de privacidad de la plataforma. (Capacidad pendiente de implementación en frontend).
 
 ## Assessment Catalog
 
@@ -208,7 +229,8 @@ Baseline documental derivado del [alcance](scope.md) y la [definición del produ
 - **Pregunta:** ¿Qué campos y operaciones comprende el perfil?
 - **Motivo:** Delimitar RF-004 aplicando minimización de datos.
 - **Impacto:** RF-004 y [RNF-006](non-functional-requirements.md#rnf-006--data-minimization).
-- **Status:** OPEN.
+- **Status:** RESOLVED (MVP).
+- **Resolución:** Para el alcance del MVP, el perfil es estrictamente de solo lectura a través de `GET /users/me`. Expone exclusivamente los seis campos autorizados bajo minimización de datos: `userId`, `email`, `emailVerified`, `createdAt`, `adultConfirmedAt` y `status`. No se admiten operaciones de actualización, edición de correo (conforme a la invariante AJ-04) ni campos de perfil adicionales (como nombres o datos sociodemográficos). La capacidad backend (RF-004a) se encuentra implementada y verificada; no genera eventos de auditoría y reutiliza los patrones existentes.
 
 ### OQ-PROD-010
 
@@ -216,7 +238,8 @@ Baseline documental derivado del [alcance](scope.md) y la [definición del produ
 - **Pregunta:** ¿Qué acciones concretas ofrecerán los controles básicos de privacidad?
 - **Motivo:** Convertir RF-004 en un requisito verificable sin asumir mecanismos.
 - **Impacto:** RF-004, RNF-005 y [Privacy](business-rules.md#privacy).
-- **Status:** OPEN.
+- **Status:** RESOLVED (MVP).
+- **Resolución:** Los controles básicos de privacidad para el MVP comprenden tres capacidades: (1) Consulta autenticada de los datos canónicos del perfil (`GET /users/me` bajo RF-004a); (2) Eliminación física irreversible de la cuenta y sus dependencias privadas (`DELETE /users/me` bajo RF-004b), con validación obligatoria de la contraseña actual, desvinculación a NULL de identificadores en `yusay.audit_event` mediante trigger V021 (SECURITY DEFINER con privilegios mínimos y search_path seguro) y emisión de `USER_DELETED` aislado de fallos no bloqueantes de persistencia conforme a DP-TRANS-001 (SAVEPOINT); y (3) Información de privacidad accesible directamente desde la interfaz frontend. Las capacidades backend RF-004a y RF-004b están implementadas y verificadas; la presentación visual de la política de privacidad en frontend permanece pendiente.
 
 ### OQ-PROD-011
 
@@ -270,7 +293,7 @@ Baseline documental derivado del [alcance](scope.md) y la [definición del produ
 
 - **ID:** OQ-PROD-017.
 - **Pregunta:** ¿Qué preferencias avanzadas se ofrecerían?
-- **Motivo:** La capacidad COULD está definida solo a nivel de alcance.
+- **Motivo:** La capacidad COULD está definida solo a nivel de alcance; desacoplada del perfil de solo lectura básico del MVP (RF-004 / OQ-PROD-009).
 - **Impacto:** RF-028 y RF-004.
 - **Status:** OPEN.
 

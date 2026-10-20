@@ -6,7 +6,7 @@ La clasificación define el alcance inicial, no una selección tecnológica. Las
 
 ### Identity
 
-Registro, verificación de correo, autenticación, logout, recuperación de contraseña, perfil y controles básicos de privacidad.
+Registro, verificación de correo, autenticación, logout, recuperación de contraseña, perfil de solo lectura (RF-004a) y controles básicos de privacidad con supresión de cuenta (RF-004b) e información accesible de privacidad.
 
 ### Assessment
 
