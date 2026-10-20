@@ -1,0 +1,894 @@
+{
+  "info": {
+    "_postman_id": "c1f7a462-8e12-4f39-9b57-9d18476bf3a1",
+    "name": "Yusay Platform API - Flujo Normal",
+    "description": "Colección oficial de Postman para probar el flujo normal de la API de Yusay con gestión automática de tokens JWT mediante scripts en JavaScript. Incluye ciclo de identidad, evaluaciones, check-ins, línea de tiempo, tendencias y cierre de sesión/supresión de cuenta.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5127",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "usuario@yusay.local",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "NormativePassword#2026",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "instrumentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "attemptId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "questionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "optionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "dimensionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkInId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "verificationToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00. Salud & Diagnóstico",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Comprueba el estado de salud del backend y la conectividad activa con PostgreSQL."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01. Identidad & Autenticación (Auto-Token)",
+      "item": [
+        {
+          "name": "1. Registro de Usuario (RF-001)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.userId) {",
+                  "        pm.collectionVariables.set('userId', data.userId);",
+                  "        console.log('Usuario registrado con Id:', data.userId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"adultConfirmed\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Registra una cuenta de usuario. En entorno de desarrollo o pruebas, el token de verificación puede obtenerse de logs o pruebas de integración."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Verificar Correo Electrónico (RF-001)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verificationToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Verifica el correo electrónico para habilitar el inicio de sesión."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Iniciar Sesión [AUTO-TOKEN JWT] (RF-002)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.accessToken) {",
+                  "        // Guardar token JWT automáticamente en las variables de la colección",
+                  "        pm.collectionVariables.set('accessToken', data.accessToken);",
+                  "        pm.collectionVariables.set('userId', data.userId);",
+                  "        console.log('✓ Token JWT guardado automáticamente en {{accessToken}}');",
+                  "        console.log('✓ Expira en:', data.expiresAt);",
+                  "    } else {",
+                  "        console.error('No se recibió accessToken en la respuesta.');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/sign-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "sign-in"
+              ]
+            },
+            "description": "Inicia sesión con credenciales válidas. El script de pruebas en JavaScript extrae automáticamente el accessToken y lo inyecta en la variable de colección {{accessToken}} para que todas las peticiones autenticadas lo utilicen sin intervención manual."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Consultar Perfil Autenticado (RF-004a)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Respuesta contiene exactamente los 6 campos normativos', function () {",
+                  "    const data = pm.response.json();",
+                  "    pm.expect(data).to.have.property('userId');",
+                  "    pm.expect(data).to.have.property('email');",
+                  "    pm.expect(data).to.have.property('emailVerified');",
+                  "    pm.expect(data).to.have.property('createdAt');",
+                  "    pm.expect(data).to.have.property('adultConfirmedAt');",
+                  "    pm.expect(data).to.have.property('status');",
+                  "    // Comprobar ausencia de credenciales ni roles",
+                  "    pm.expect(data).to.not.have.property('passwordHash');",
+                  "    pm.expect(data).to.not.have.property('roles');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Obtiene los datos de perfil del usuario autenticado en modo solo lectura, utilizando automáticamente el token generado por el inicio de sesión."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Cerrar Sesión / Sign-Out (RF-002)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('accessToken', '');",
+                  "    console.log('✓ Token revocado y variable {{accessToken}} limpiada.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/sign-out",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "sign-out"
+              ]
+            },
+            "description": "Revoca el JTI del token en Redis e invalida la sesión del usuario."
+          },
+          "response": []
+        },
+        {
+          "name": "6. Suprimir Cuenta de Usuario (RF-004b)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 204 No Content', function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});",
+                  "if (pm.response.code === 204) {",
+                  "    pm.collectionVariables.set('accessToken', '');",
+                  "    console.log('✓ Cuenta eliminada físicamente y desvinculada de auditoría.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "Elimina físicamente la cuenta de usuario tras validar la contraseña actual. Ejecuta la desvinculación a NULL de auditoría mediante trigger V021 e invalida el token en Redis."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02. Instrumentos & Evaluaciones",
+      "item": [
+        {
+          "name": "1. Listar Instrumentos Disponibles (RF-005)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.items && data.items.length > 0) {",
+                  "        pm.collectionVariables.set('instrumentId', data.items[0].instrumentId);",
+                  "        console.log('✓ Primer instrumentId guardado:', data.items[0].instrumentId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/instruments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments"
+              ]
+            },
+            "description": "Lista los instrumentos publicados disponibles para evaluación."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Detalle de Instrumento (RF-005)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/instruments/{{instrumentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments",
+                "{{instrumentId}}"
+              ]
+            },
+            "description": "Consulta el detalle y estructura del instrumento."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Iniciar Intento de Evaluación (RF-006)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.attemptId) {",
+                  "        pm.collectionVariables.set('attemptId', data.attemptId);",
+                  "        console.log('✓ Intento iniciado con Id:', data.attemptId);",
+                  "    }",
+                  "    if (data.questions && data.questions.length > 0) {",
+                  "        const q = data.questions[0];",
+                  "        pm.collectionVariables.set('questionId', q.questionId);",
+                  "        if (q.options && q.options.length > 0) {",
+                  "            pm.collectionVariables.set('optionId', q.options[0].optionId);",
+                  "        }",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/instruments/{{instrumentId}}/attempts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "instruments",
+                "{{instrumentId}}",
+                "attempts"
+              ]
+            },
+            "description": "Inicia un nuevo intento de evaluación en estado IN_PROGRESS. El script guarda automáticamente el attemptId, questionId y optionId para el siguiente paso."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Guardar Respuestas del Intento (RF-006 / RF-007)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answers\": [\n    {\n      \"questionId\": \"{{questionId}}\",\n      \"optionId\": \"{{optionId}}\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/assessments/{{attemptId}}/answers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessments",
+                "{{attemptId}}",
+                "answers"
+              ]
+            },
+            "description": "Guarda de forma transaccional una o varias respuestas al intento de evaluación."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Consultar Progreso del Intento (RF-007)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessments/{{attemptId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessments",
+                "{{attemptId}}"
+              ]
+            },
+            "description": "Consulta el estado y progreso del intento de evaluación."
+          },
+          "response": []
+        },
+        {
+          "name": "6. Enviar y Calcular Evaluación (RF-008)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code es 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json();",
+                  "    console.log('✓ Evaluación enviada con éxito. Score calculado:', data.result ? data.result.score : 'N/A');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessments/{{attemptId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessments",
+                "{{attemptId}}",
+                "submit"
+              ]
+            },
+            "description": "Envía el intento, ejecuta el cálculo de puntaje atómico y resuelve la interpretación oficial correspondiente."
+          },
+          "response": []
+        },
+        {
+          "name": "7. Consultar Orientación / Guidance (RF-018)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessments/{{attemptId}}/guidance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessments",
+                "{{attemptId}}",
+                "guidance"
+              ]
+            },
+            "description": "Obtiene la orientación educativa compuesta del resultado oficial: interpretación, limitaciones, temas asociados, recursos y descargo no clínico."
+          },
+          "response": []
+        },
+        {
+          "name": "8. Historial de Evaluaciones Propias (RF-009)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/assessments?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "assessments"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Consulta el historial paginado de intentos de evaluación completados y en progreso del usuario."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03. Seguimiento Diario (Check-ins)",
+      "item": [
+        {
+          "name": "1. Listar Dimensiones Activas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.items && data.items.length > 0) {",
+                  "        pm.collectionVariables.set('dimensionId', data.items[0].dimensionId);",
+                  "        console.log('✓ Primer dimensionId guardado:', data.items[0].dimensionId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dimensions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dimensions"
+              ]
+            },
+            "description": "Consulta las dimensiones de seguimiento disponibles."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Crear Check-in Diario (RF-010)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    if (data.checkInId) {",
+                  "        pm.collectionVariables.set('checkInId', data.checkInId);",
+                  "        console.log('✓ Check-in creado con Id:', data.checkInId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recordedAt\": \"{{$isoTimestamp}}\",\n  \"note\": \"Registro diario de prueba\",\n  \"measurements\": [\n    {\n      \"dimensionId\": \"{{dimensionId}}\",\n      \"value\": 4\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/check-ins",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "check-ins"
+              ]
+            },
+            "description": "Registra una entrada de seguimiento diario con una o más mediciones de dimensiones activas."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Listar Check-ins Paginados (RF-010 / OQ-PROD-019)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/check-ins?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "check-ins"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Consulta la colección propia de check-ins con paginación keyset basada en cursor Base64URL."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Consultar Check-in por Id (RF-010)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/check-ins/{{checkInId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "check-ins",
+                "{{checkInId}}"
+              ]
+            },
+            "description": "Consulta un check-in específico por su identificador."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Modificar Check-in (RF-011)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recordedAt\": \"{{$isoTimestamp}}\",\n  \"note\": \"Nota actualizada dentro de la ventana permitida\",\n  \"measurements\": [\n    {\n      \"dimensionId\": \"{{dimensionId}}\",\n      \"value\": 5\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/check-ins/{{checkInId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "check-ins",
+                "{{checkInId}}"
+              ]
+            },
+            "description": "Modifica un check-in existente dentro de la ventana de 168 horas conforme a las reglas de negocio."
+          },
+          "response": []
+        },
+        {
+          "name": "6. Eliminar Check-in (RF-011)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/check-ins/{{checkInId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "check-ins",
+                "{{checkInId}}"
+              ]
+            },
+            "description": "Elimina un check-in propio de forma controlada."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. Bienestar & Tendencias (Tracking)",
+      "item": [
+        {
+          "name": "1. Línea de Tiempo / Timeline (RF-013)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/timeline?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "timeline"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Consulta el read model cronológico unificado que integra resultados de evaluaciones y check-ins."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Tendencias de Dimensión (RF-016)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trends/dimensions/{{dimensionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trends",
+                "dimensions",
+                "{{dimensionId}}"
+              ]
+            },
+            "description": "Consulta la serie de mediciones y tendencia de una dimensión específica respetando la compatibilidad de versiones."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Tendencias de Instrumento (RF-016)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/trends/instruments/{{instrumentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trends",
+                "instruments",
+                "{{instrumentId}}"
+              ]
+            },
+            "description": "Consulta la tendencia histórica de puntajes de un instrumento."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05. Recursos Educativos (Contenido)",
+      "item": [
+        {
+          "name": "1. Listar Recursos Publicados (RF-022)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/resources?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "resources"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Consulta el catálogo de recursos psicoeducativos publicados."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Listar Temas / Topics (RF-022)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/topics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "topics"
+              ]
+            },
+            "description": "Consulta el catálogo de temas controlados."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
