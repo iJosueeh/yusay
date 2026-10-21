@@ -1,27 +1,39 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #F7F5F0;
-  --color-forest: #304D43;
-  --color-forest-hover: #263e36;
-  --color-forest-light: #3d6155;
-  --color-sage: #A6B49B;
+  --color-canvas: #fcfcf7;
+  --color-forest: #1c3a13;
+  --color-forest-hover: #142a0e;
+  --color-forest-light: #284e1d;
+  --color-forest-depths: #1c3a13;
+  --color-lime-pulse: #d3fa99;
+  --color-sage-moss: #757c5d;
+  --color-olive-gold: #9f995b;
+  --color-eucalyptus: #698e79;
+  --color-snow-white: #fcfcf7;
+  --color-warm-stone: #eeeee9;
+  --color-frosted-glass: #c4c7c4;
+  --color-ash: #b3b3b3;
+  --color-pewter: #666666;
+  --color-ink: #000000;
+
+  --color-sage: #757c5d;
   --color-sage-light: #e5eae1;
   --color-sage-subtle: #f0f4ee;
   --color-terracotta: #C98268;
   --color-terracotta-hover: #b56f56;
   --color-terracotta-light: #faece6;
-  --color-midnight: #273340;
-  --color-midnight-muted: #56687a;
-  --color-midnight-subtle: #899bb0;
+  --color-midnight: #1c3a13;
+  --color-midnight-muted: #666666;
+  --color-midnight-subtle: #8a8d8a;
 
   --font-serif: var(--font-newsreader), Georgia, serif;
   --font-sans: var(--font-dm-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 :root {
-  --background: #F7F5F0;
-  --foreground: #273340;
+  --background: #fcfcf7;
+  --foreground: #1c3a13;
 }
 
 html {

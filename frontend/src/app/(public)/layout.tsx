@@ -9,7 +9,7 @@ export default function PublicLayout({
   return (
     <div className="min-h-screen flex flex-col bg-canvas text-midnight">
       <PublicHeader />
-      <main className="w-full flex-1 pt-20">{children}</main>
+      <main className="w-full flex-1 pt-[120px]">{children}</main>
       <PublicFooter />
     </div>
   );

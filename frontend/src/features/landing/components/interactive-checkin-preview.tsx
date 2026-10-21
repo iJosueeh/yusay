@@ -85,25 +85,28 @@ export function InteractiveCheckInMockup() {
   };
 
   return (
-    <div className="bg-white border border-sage/40 rounded-2xl p-6 sm:p-7 shadow-sm relative overflow-hidden transition-all duration-300 hover:border-forest/50 hover:shadow-md">
-      {/* Cabecera del Check-in con estado en tiempo real */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sage/20 pb-4 mb-5">
+    <div className="bg-snow-white/5 border border-snow-white/15 rounded-2xl p-6 sm:p-7 shadow-none relative overflow-hidden transition-colors">
+      {/* Cabecera de la Pausa Diaria con estado en tiempo real */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-snow-white/10 pb-4 mb-5">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[0.6875rem] uppercase tracking-wider text-terracotta font-semibold">
-              Check-in Diario
+            <span className="px-2 py-0.5 rounded-full border border-snow-white/30 font-mono text-[10px] font-medium text-snow-white uppercase tracking-wider">
+              RD-01
             </span>
-            <span className="text-[10px] uppercase tracking-widest bg-sage-light text-forest font-semibold px-2 py-0.5 rounded-full">
+            <span className="text-[0.6875rem] uppercase tracking-wider text-snow-white/70 font-mono font-medium">
+              Registro Diario
+            </span>
+            <span className="text-[10px] uppercase tracking-wider bg-lime-pulse text-forest-depths font-mono font-medium px-2 py-0.5 rounded-full">
               Pausa de 1 min
             </span>
           </div>
-          <h3 className="font-serif text-xl sm:text-2xl text-forest font-normal mt-0.5">
-            Registro de hoy
+          <h3 className="font-serif text-xl sm:text-2xl text-snow-white font-light mt-0.5 tracking-tight">
+            Anotación de hoy
           </h3>
         </div>
 
         {/* Indicador de persistencia */}
-        <div className="flex items-center gap-1.5 self-start sm:self-auto bg-canvas px-3 py-1.5 rounded-full border border-sage/30 text-xs font-medium text-midnight-muted">
+        <div className="flex items-center gap-1.5 self-start sm:self-auto bg-snow-white/10 px-3 py-1.5 rounded-full border border-snow-white/20 text-xs font-mono text-snow-white/90">
           <motion.span
             animate={
               hasInteracted && !shouldReduceMotion
@@ -112,18 +115,18 @@ export function InteractiveCheckInMockup() {
             }
             transition={{ duration: 0.3 }}
             className={`w-2 h-2 rounded-full ${
-              hasInteracted ? "bg-terracotta" : "bg-forest animate-pulse"
+              hasInteracted ? "bg-lime-pulse" : "bg-lime-pulse/70 animate-pulse"
             }`}
             aria-hidden="true"
           />
           <span className="text-xs">
-            {hasInteracted ? "Registro actualizado" : "Registro guardado"}
+            {hasInteracted ? "Anotación actualizada" : "Anotación guardada"}
           </span>
         </div>
       </div>
 
-      <p className="text-xs text-midnight-muted mb-4 font-sans">
-        Interactúa con la escala del <strong>1 al 5</strong> para observar cómo se registra cada dimensión sin respuestas forzadas:
+      <p className="text-xs text-snow-white/75 mb-4 font-sans">
+        Interactúa con la escala del <strong>1 al 5</strong> para observar cómo anotas cada aspecto con total sencillez:
       </p>
 
       {/* Lista de Dimensiones Interactivas */}
@@ -135,16 +138,16 @@ export function InteractiveCheckInMockup() {
           return (
             <div
               key={dim.id}
-              className="p-3.5 rounded-xl bg-canvas border border-sage/30 transition-all hover:border-forest/30 hover:bg-sage-subtle/40"
+              className="p-3.5 rounded-lg bg-snow-white/5 border border-snow-white/10 transition-colors hover:border-snow-white/20"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 {/* Nombre y etiqueta descriptiva dinámica */}
                 <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-white border border-sage/30 flex items-center justify-center shrink-0 shadow-2xs">
-                    <Icon className={`h-4 w-4 ${dim.iconColor}`} />
+                  <div className="w-7 h-7 rounded-lg bg-snow-white/10 border border-snow-white/20 flex items-center justify-center shrink-0 shadow-none">
+                    <Icon className="h-4 w-4 text-snow-white" />
                   </div>
                   <div>
-                    <span className="text-[0.6875rem] uppercase tracking-wide text-midnight-muted block font-semibold">
+                    <span className="text-[0.6875rem] uppercase tracking-wide text-snow-white/60 block font-mono font-medium">
                       {dim.name}
                     </span>
                     <motion.span
@@ -152,7 +155,7 @@ export function InteractiveCheckInMockup() {
                       initial={shouldReduceMotion ? false : { opacity: 0.6, y: -2 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="text-xs text-forest font-medium block"
+                      className="text-xs text-snow-white font-medium block font-sans"
                     >
                       {dim.labels[currentLevel]}
                     </motion.span>
@@ -163,7 +166,7 @@ export function InteractiveCheckInMockup() {
                 <div
                   role="radiogroup"
                   aria-label={`Nivel para ${dim.name}`}
-                  className="flex items-center gap-1.5 self-end sm:self-auto bg-white/80 p-1 rounded-lg border border-sage/30"
+                  className="flex items-center gap-1.5 self-end sm:self-auto bg-snow-white/10 p-1 rounded-lg border border-snow-white/15"
                 >
                   {[1, 2, 3, 4, 5].map((level) => {
                     const isSelected = level === currentLevel;
@@ -179,12 +182,12 @@ export function InteractiveCheckInMockup() {
                         whileHover={shouldReduceMotion ? undefined : { scale: 1.1 }}
                         whileTap={shouldReduceMotion ? undefined : { scale: 0.92 }}
                         onClick={() => handleSelect(dim.id, level)}
-                        className={`w-7 h-7 rounded-md text-xs font-semibold flex items-center justify-center transition-all ${
+                        className={`w-7 h-7 rounded-md text-xs font-mono font-medium flex items-center justify-center transition-all cursor-pointer ${
                           isSelected
-                            ? "bg-forest text-canvas shadow-xs font-bold"
+                            ? "bg-lime-pulse text-forest-depths shadow-none font-bold"
                             : isFilled
-                            ? "bg-sage-light text-forest hover:bg-sage/40"
-                            : "bg-transparent text-midnight-muted hover:bg-sage-light/60 hover:text-midnight"
+                            ? "bg-snow-white/20 text-snow-white hover:bg-snow-white/30"
+                            : "bg-transparent text-snow-white/60 hover:bg-snow-white/10 hover:text-snow-white"
                         }`}
                       >
                         {level}
@@ -199,13 +202,13 @@ export function InteractiveCheckInMockup() {
       </div>
 
       {/* Sección opcional: Nota reflexiva interactiva */}
-      <div className="border-t border-sage/20 pt-3">
+      <div className="border-t border-snow-white/10 pt-3">
         <button
           type="button"
           onClick={() => setShowNote(!showNote)}
-          className="text-xs text-forest font-medium inline-flex items-center gap-1.5 hover:text-forest-hover transition-colors py-1 group"
+          className="text-xs text-lime-pulse font-mono inline-flex items-center gap-1.5 hover:underline py-1 group cursor-pointer"
         >
-          <MessageSquareText className="h-3.5 w-3.5 text-terracotta group-hover:scale-110 transition-transform" />
+          <MessageSquareText className="h-3.5 w-3.5 text-lime-pulse" />
           <span>{showNote ? "Ocultar nota reflexiva" : "+ Ver nota reflexiva de contexto"}</span>
         </button>
 
@@ -214,26 +217,26 @@ export function InteractiveCheckInMockup() {
             initial={shouldReduceMotion ? false : { opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             transition={{ duration: 0.3 }}
-            className="mt-2.5 p-3 rounded-xl bg-sage-subtle border border-sage/30 text-xs text-midnight-muted leading-relaxed"
+            className="mt-2.5 p-3.5 rounded-lg bg-snow-white/10 border border-snow-white/20 text-xs text-snow-white leading-relaxed shadow-none"
           >
-            <p className="font-serif italic text-midnight">
+            <p className="font-serif italic text-snow-white font-light">
               «Paseo tranquilo al atardecer. Menor sobrecarga tras priorizar solo dos tareas principales en la mañana.»
             </p>
-            <span className="text-[10px] uppercase tracking-wider text-midnight-subtle block mt-1 font-sans">
-              Opcional · Ventana de edición de 168 horas
+            <span className="text-[10px] uppercase tracking-wider text-snow-white/60 block mt-1 font-mono">
+              Opcional · Ventana flexible de 7 días
             </span>
           </motion.div>
         )}
       </div>
 
       {/* Pie de tarjeta informativo */}
-      <div className="mt-4 pt-3 border-t border-sage/20 flex flex-wrap items-center justify-between gap-2 text-xs text-midnight-muted">
-        <span className="flex items-center gap-1.5 font-medium text-forest">
-          <CheckCircle2 className="h-4 w-4 text-forest" />
-          4 dimensiones oficiales
+      <div className="mt-4 pt-3 border-t border-snow-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-snow-white/70 font-mono">
+        <span className="flex items-center gap-1.5 font-medium text-snow-white">
+          <CheckCircle2 className="h-4 w-4 text-lime-pulse" />
+          4 aspectos fundamentales
         </span>
-        <span className="text-[0.6875rem] text-midnight-subtle">
-          Escala ordinal 1–5 · Sin juicios
+        <span className="text-[0.6875rem] text-snow-white/60">
+          Escala sencilla del 1 al 5 · Sin juicios
         </span>
       </div>
     </div>

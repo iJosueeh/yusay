@@ -1,5 +1,6 @@
 import {
   HeroSection,
+  MetricsStrip,
   ConceptSection,
   MethodSection,
   ToolsPreviewSection,
@@ -18,6 +19,7 @@ export default function LandingPage() {
   return (
     <>
       <HeroSection />
+      <MetricsStrip />
       <ConceptSection />
       <MethodSection />
       <ToolsPreviewSection />

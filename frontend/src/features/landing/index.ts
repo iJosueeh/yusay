@@ -1,4 +1,5 @@
 export * from "./components/hero-section";
+export * from "./components/metrics-strip";
 export * from "./components/concept-section";
 export * from "./components/method-section";
 export * from "./components/tools-preview-section";

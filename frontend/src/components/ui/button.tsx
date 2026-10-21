@@ -13,15 +13,15 @@ export interface ButtonBaseProps {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-forest text-canvas hover:bg-forest-hover shadow-sm hover:shadow active:scale-[0.99]",
+    "bg-forest-depths text-snow-white hover:opacity-90 shadow-none active:scale-[0.99]",
   secondary:
-    "border border-forest/30 text-forest hover:border-forest hover:bg-forest/5 active:scale-[0.99]",
+    "border border-forest-depths/30 text-forest-depths hover:border-forest-depths hover:bg-forest-depths/5 active:scale-[0.99] shadow-none",
   terracotta:
-    "bg-terracotta text-canvas hover:bg-terracotta-hover shadow-sm hover:shadow active:scale-[0.99]",
+    "bg-terracotta text-snow-white hover:bg-terracotta-hover shadow-none active:scale-[0.99]",
   ghost:
-    "text-midnight hover:text-forest hover:bg-sage-light/50 active:scale-[0.99]",
+    "text-pewter hover:text-forest-depths hover:bg-warm-stone active:scale-[0.99] shadow-none",
   "outline-white":
-    "border border-canvas/40 text-canvas hover:bg-canvas/10 hover:border-canvas active:scale-[0.99]",
+    "border border-snow-white/40 text-snow-white hover:bg-snow-white/10 hover:border-snow-white active:scale-[0.99] shadow-none",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

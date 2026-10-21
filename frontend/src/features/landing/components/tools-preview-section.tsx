@@ -7,7 +7,7 @@ export function ToolsPreviewSection() {
   return (
     <section
       id="herramientas"
-      className="bg-sage-subtle/50 border-y border-sage/40 py-14 lg:py-20"
+      className="bg-forest-depths text-snow-white border-y border-forest-depths py-20 lg:py-28"
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
         {/* Título de Sección con redacción optimizada para Check-in */}
@@ -16,13 +16,13 @@ export function ToolsPreviewSection() {
           yOffset={16}
           className="text-center max-w-2xl mx-auto mb-12 space-y-2.5"
         >
-          <span className="text-xs font-semibold uppercase tracking-widest text-terracotta">
+          <span className="text-xs font-mono uppercase tracking-widest text-lime-pulse font-medium">
             Herramientas cotidianas
           </span>
-          <h2 className="font-serif text-3xl sm:text-4xl text-forest font-normal">
+          <h2 className="font-serif text-3xl sm:text-4xl text-snow-white font-light tracking-tight">
             Una pausa breve para observar tu recorrido
           </h2>
-          <p className="font-sans text-sm sm:text-base text-midnight-muted">
+          <p className="font-sans text-sm sm:text-base text-snow-white/80">
             Diseñado para registrar tu estado en menos de un minuto, sin fricciones,
             fórmulas complejas ni exigencias de productividad.
           </p>
@@ -38,8 +38,8 @@ export function ToolsPreviewSection() {
             className="lg:col-span-6 space-y-3"
           >
             <InteractiveCheckInMockup />
-            <p className="text-xs text-midnight-muted/80 text-center font-sans">
-              * Demostración interactiva del check-in diario en Yusay con las cuatro dimensiones oficiales.
+            <p className="text-xs text-snow-white/60 text-center font-mono">
+              * Demostración interactiva de la pausa diaria en Yusay con los cuatro aspectos esenciales.
             </p>
           </Reveal>
 
@@ -50,8 +50,8 @@ export function ToolsPreviewSection() {
             yOffset={16}
             className="lg:col-span-6 space-y-4"
           >
-            {/* Fotografía de escritorio sereno con hover mejorado */}
-            <div className="group rounded-2xl overflow-hidden shadow-sm border border-sage/40 max-h-[290px] sm:max-h-[310px] aspect-[16/9] bg-white transition-all duration-300 hover:shadow-md hover:border-forest/40">
+            {/* Fotografía de escritorio sereno */}
+            <div className="group rounded-2xl overflow-hidden shadow-none border border-snow-white/15 max-h-[290px] sm:max-h-[310px] aspect-[16/9] bg-forest-depths">
               <Image
                 src={toolsImg1}
                 alt="Escritorio sereno con taza de infusión, cuaderno abierto y luz matinal"
@@ -59,62 +59,80 @@ export function ToolsPreviewSection() {
               />
             </div>
 
-            {/* Tarjeta de Tendencias con microinteracciones y hovers */}
-            <div className="bg-white border border-sage/40 rounded-2xl p-6 sm:p-7 shadow-sm transition-all duration-300 hover:border-forest/50 hover:shadow-md hover:-translate-y-0.5 motion-reduce:hover:transform-none">
+            {/* Tarjeta de Tendencias (16px, shadowless en Dark Section) */}
+            <div className="bg-snow-white/5 border border-snow-white/15 rounded-2xl p-6 sm:p-7 shadow-none">
               <div className="flex items-center justify-between mb-3">
-                <div>
-                  <span className="text-[0.6875rem] uppercase tracking-wider text-forest font-semibold block">
-                    Evolución Temporal
+                <div className="flex items-center gap-2.5">
+                  <span className="px-2 py-0.5 rounded-full border border-snow-white/30 font-mono text-[10px] font-medium text-snow-white uppercase tracking-wider">
+                    TR-03
                   </span>
-                  <h3 className="font-serif text-lg text-forest font-normal">
-                    Historial de dimensiones
-                  </h3>
+                  <div>
+                    <span className="text-[0.6875rem] uppercase tracking-wider text-snow-white/70 font-mono block">
+                      Evolución Temporal
+                    </span>
+                    <h3 className="font-serif text-lg text-snow-white font-light tracking-tight">
+                      Historial de dimensiones
+                    </h3>
+                  </div>
                 </div>
-                <span className="text-xs text-forest font-medium bg-sage-light px-3 py-1 rounded-full border border-sage/30 transition-colors hover:bg-sage/40">
+                <span className="text-xs text-snow-white font-mono bg-snow-white/10 px-3 py-1 rounded-full border border-snow-white/20">
                   Últimos 14 días
                 </span>
               </div>
 
-              <p className="text-xs text-midnight-muted mb-4">
+              <p className="text-xs text-snow-white/70 mb-4 font-sans">
                 Comportamiento de tus dimensiones registradas a lo largo de las semanas:
               </p>
 
-              <div className="space-y-2.5">
-                <div className="p-3 rounded-xl bg-canvas border border-sage/20 flex items-center justify-between text-xs transition-colors hover:bg-sage-subtle hover:border-forest/20">
-                  <span className="text-midnight font-medium">
+              <div className="space-y-2.5 font-sans">
+                <div className="p-3 rounded-lg bg-snow-white/5 border border-snow-white/10 flex items-center justify-between text-xs">
+                  <span className="text-snow-white font-medium">
                     Ánimo general
                   </span>
-                  <span className="text-forest font-semibold">
+                  <span className="text-lime-pulse font-mono text-[11px] font-medium">
                     Mediana 4 · Predominio sereno
                   </span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-canvas border border-sage/20 flex items-center justify-between text-xs transition-colors hover:bg-sage-subtle hover:border-forest/20">
-                  <span className="text-midnight font-medium">
+                <div className="p-3 rounded-lg bg-snow-white/5 border border-snow-white/10 flex items-center justify-between text-xs">
+                  <span className="text-snow-white font-medium">
                     Nivel de Estrés
                   </span>
-                  <span className="text-midnight-muted font-medium">
+                  <span className="text-snow-white/70 font-mono text-[11px]">
                     Mediana 2 · Variabilidad baja
                   </span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-canvas border border-sage/20 flex items-center justify-between text-xs transition-colors hover:bg-sage-subtle hover:border-forest/20">
-                  <span className="text-midnight font-medium">
+                <div className="p-3 rounded-lg bg-snow-white/5 border border-snow-white/10 flex items-center justify-between text-xs">
+                  <span className="text-snow-white font-medium">
                     Nivel de Energía
                   </span>
-                  <span className="text-forest font-semibold">
+                  <span className="text-snow-white/90 font-mono text-[11px] font-medium">
                     Mediana 3 · Constante
                   </span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-canvas border border-sage/20 flex items-center justify-between text-xs transition-colors hover:bg-sage-subtle hover:border-forest/20">
-                  <span className="text-midnight font-medium">
+                <div className="p-3 rounded-lg bg-snow-white/5 border border-snow-white/10 flex items-center justify-between text-xs">
+                  <span className="text-snow-white font-medium">
                     Calidad de Sueño
                   </span>
-                  <span className="text-terracotta font-semibold">
+                  <span className="text-lime-pulse font-mono text-[11px] font-medium">
                     Mediana 4 · Reposo satisfactorio
                   </span>
                 </div>
+              </div>
+
+              <div className="pt-3 border-t border-snow-white/10 mt-4 flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase text-snow-white/60">
+                  Medianas ordinales sin sesgo
+                </span>
+                <a
+                  href="/auth/registro"
+                  className="inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-snow-white border-b-[1.5px] border-snow-white pb-0.5 hover:opacity-75 transition-opacity"
+                >
+                  <span>Ver registro completo</span>
+                  <span>→</span>
+                </a>
               </div>
             </div>
           </Reveal>

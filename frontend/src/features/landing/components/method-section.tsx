@@ -5,7 +5,7 @@ export function MethodSection() {
   return (
     <section
       id="metodo"
-      className="py-14 lg:py-20 max-w-7xl mx-auto px-6 lg:px-12 w-full"
+      className="py-16 lg:py-24 max-w-7xl mx-auto px-6 lg:px-12 w-full"
     >
       {/* Cabecera de sección */}
       <Reveal
@@ -14,20 +14,20 @@ export function MethodSection() {
         className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-12"
       >
         <div className="space-y-2 max-w-xl">
-          <span className="text-xs font-semibold uppercase tracking-widest text-forest">
+          <span className="text-xs font-mono uppercase tracking-widest text-pewter">
             Método de uso
           </span>
-          <h2 className="font-serif text-3xl sm:text-4xl text-forest font-normal">
+          <h2 className="font-serif text-3xl sm:text-4xl text-forest-depths font-light tracking-tight">
             Un proceso sencillo integrado en tu día a día
           </h2>
         </div>
-        <p className="text-sm text-midnight-muted max-w-sm">
+        <p className="text-sm text-pewter max-w-sm">
           Tres momentos complementarios pensados para encajar con naturalidad en tu
           rutina, sin exigir esfuerzo excesivo ni generar ansiedad.
         </p>
       </Reveal>
 
-      {/* Tarjetas de las tres etapas con entrada escalonada y hovers mejorados */}
+      {/* Tarjetas de las tres etapas con especímenes botánicos (16px, shadowless) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
         {/* 01 Registrar */}
         <Reveal
@@ -36,30 +36,44 @@ export function MethodSection() {
           yOffset={16}
           className="flex flex-col h-full"
         >
-          <div className="bg-white/90 border border-sage/40 p-7 sm:p-8 rounded-2xl shadow-xs flex flex-col justify-between h-full transition-all duration-300 hover:border-forest/60 hover:shadow-lg hover:-translate-y-1.5 group motion-reduce:hover:transform-none motion-reduce:transition-none">
+          <div className="bg-snow-white border border-warm-stone p-7 sm:p-8 rounded-2xl shadow-none flex flex-col justify-between h-full transition-colors hover:border-frosted-glass group">
             <div className="space-y-3.5">
               <div className="flex items-center justify-between">
-                <span className="font-serif italic text-3xl text-terracotta group-hover:scale-110 group-hover:text-terracotta-hover transition-transform duration-300 motion-reduce:transform-none">
-                  01
-                </span>
-                <span className="text-[0.6875rem] uppercase tracking-wider text-forest bg-sage-light/80 px-2.5 py-1 rounded-full font-sans font-semibold">
+                <div className="flex items-center gap-2.5">
+                  <span className="font-serif italic text-3xl text-forest-depths/60">
+                    01
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full border border-forest-depths/30 font-mono text-[10px] font-medium text-forest-depths uppercase tracking-wider">
+                    RD-01
+                  </span>
+                </div>
+                <span className="text-[0.6875rem] uppercase tracking-wider text-forest-depths bg-warm-stone px-2.5 py-1 rounded-full font-mono font-medium border border-frosted-glass/50">
                   Pausa de 1 minuto
                 </span>
               </div>
-              <h3 className="font-serif text-2xl text-forest font-normal">
-                Check-in consciente
+              <h3 className="font-serif text-2xl text-forest-depths font-light tracking-tight">
+                Pausa diaria consciente
               </h3>
-              <p className="font-sans text-sm text-midnight-muted leading-relaxed">
-                Dedica una pausa breve al final de la jornada para notar tus sensaciones
-                en cuatro dimensiones clave: ánimo, estrés, energía y sueño. Escala 1 a 5
-                intuitiva, sin fórmulas forzadas y con espacio para notas reflexivas.
+              <p className="font-sans text-sm text-pewter leading-relaxed">
+                Dedica un instante al final de la jornada para notar cómo te sientes
+                en cuatro aspectos esenciales: ánimo, estrés, energía y descanso. Escala
+                del 1 al 5 simple e intuitiva, con espacio libre para notas personales.
               </p>
             </div>
-            <div className="pt-5 border-t border-sage/20 mt-6 flex items-center gap-2 text-xs uppercase tracking-wider text-forest font-semibold">
-              <span className="p-1 rounded-md bg-sage-subtle group-hover:bg-forest/10 transition-colors">
-                <PenLine className="h-4 w-4 text-forest group-hover:rotate-6 transition-transform motion-reduce:transform-none" />
-              </span>
-              <span>Check-in diario</span>
+            <div className="pt-5 border-t border-warm-stone mt-6 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-forest-depths font-medium font-mono">
+                <span className="p-1.5 rounded-full bg-warm-stone">
+                  <PenLine className="h-3.5 w-3.5 text-forest-depths" />
+                </span>
+                <span>Registro diario</span>
+              </div>
+              <a
+                href="#herramientas"
+                className="inline-flex items-center gap-1 text-xs font-mono uppercase tracking-wider text-forest-depths border-b-[1.5px] border-forest-depths pb-0.5 hover:opacity-75 transition-opacity"
+              >
+                <span>Probar simulador</span>
+                <span>→</span>
+              </a>
             </div>
           </div>
         </Reveal>
@@ -71,30 +85,44 @@ export function MethodSection() {
           yOffset={16}
           className="flex flex-col h-full"
         >
-          <div className="bg-sage-subtle/50 border border-sage/40 p-7 sm:p-8 rounded-2xl shadow-xs flex flex-col justify-between h-full transition-all duration-300 hover:border-forest/60 hover:shadow-lg hover:-translate-y-1.5 group motion-reduce:hover:transform-none motion-reduce:transition-none">
+          <div className="bg-snow-white border border-warm-stone p-7 sm:p-8 rounded-2xl shadow-none flex flex-col justify-between h-full transition-colors hover:border-frosted-glass group">
             <div className="space-y-3.5">
               <div className="flex items-center justify-between">
-                <span className="font-serif italic text-3xl text-terracotta group-hover:scale-110 group-hover:text-terracotta-hover transition-transform duration-300 motion-reduce:transform-none">
-                  02
-                </span>
-                <span className="text-[0.6875rem] uppercase tracking-wider text-midnight-muted bg-white px-2.5 py-1 rounded-full font-sans font-medium border border-sage/30">
+                <div className="flex items-center gap-2.5">
+                  <span className="font-serif italic text-3xl text-forest-depths/60">
+                    02
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full border border-forest-depths/30 font-mono text-[10px] font-medium text-forest-depths uppercase tracking-wider">
+                    TR-03
+                  </span>
+                </div>
+                <span className="text-[0.6875rem] uppercase tracking-wider text-forest-depths bg-warm-stone px-2.5 py-1 rounded-full font-mono font-medium border border-frosted-glass/50">
                   Seguimiento Visual
                 </span>
               </div>
-              <h3 className="font-serif text-2xl text-forest font-normal">
+              <h3 className="font-serif text-2xl text-forest-depths font-light tracking-tight">
                 Observar tendencias
               </h3>
-              <p className="font-sans text-sm text-midnight-muted leading-relaxed">
+              <p className="font-sans text-sm text-pewter leading-relaxed">
                 Visualiza la evolución temporal de tus registros y cuestionarios a lo
                 largo de las semanas. Patrones continuos presentados con claridad para
                 comprender tus ritmos, sin juicios de rendimiento.
               </p>
             </div>
-            <div className="pt-5 border-t border-sage/20 mt-6 flex items-center gap-2 text-xs uppercase tracking-wider text-forest font-semibold">
-              <span className="p-1 rounded-md bg-white group-hover:bg-forest/10 transition-colors">
-                <TrendingUp className="h-4 w-4 text-forest group-hover:rotate-6 transition-transform motion-reduce:transform-none" />
-              </span>
-              <span>Historial y tendencias</span>
+            <div className="pt-5 border-t border-warm-stone mt-6 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-forest-depths font-medium font-mono">
+                <span className="p-1.5 rounded-full bg-warm-stone">
+                  <TrendingUp className="h-3.5 w-3.5 text-forest-depths" />
+                </span>
+                <span>Historial y tendencias</span>
+              </div>
+              <a
+                href="#herramientas"
+                className="inline-flex items-center gap-1 text-xs font-mono uppercase tracking-wider text-forest-depths border-b-[1.5px] border-forest-depths pb-0.5 hover:opacity-75 transition-opacity"
+              >
+                <span>Ver historial</span>
+                <span>→</span>
+              </a>
             </div>
           </div>
         </Reveal>
@@ -106,30 +134,44 @@ export function MethodSection() {
           yOffset={16}
           className="flex flex-col h-full"
         >
-          <div className="bg-white/90 border border-sage/40 p-7 sm:p-8 rounded-2xl shadow-xs flex flex-col justify-between h-full transition-all duration-300 hover:border-forest/60 hover:shadow-lg hover:-translate-y-1.5 group motion-reduce:hover:transform-none motion-reduce:transition-none">
+          <div className="bg-snow-white border border-warm-stone p-7 sm:p-8 rounded-2xl shadow-none flex flex-col justify-between h-full transition-colors hover:border-frosted-glass group">
             <div className="space-y-3.5">
               <div className="flex items-center justify-between">
-                <span className="font-serif italic text-3xl text-terracotta group-hover:scale-110 group-hover:text-terracotta-hover transition-transform duration-300 motion-reduce:transform-none">
-                  03
-                </span>
-                <span className="text-[0.6875rem] uppercase tracking-wider text-midnight-muted bg-sage-subtle px-2.5 py-1 rounded-full font-sans font-medium border border-sage/30">
+                <div className="flex items-center gap-2.5">
+                  <span className="font-serif italic text-3xl text-forest-depths/60">
+                    03
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full border border-forest-depths/30 font-mono text-[10px] font-medium text-forest-depths uppercase tracking-wider">
+                    RC-04
+                  </span>
+                </div>
+                <span className="text-[0.6875rem] uppercase tracking-wider text-forest-depths bg-warm-stone px-2.5 py-1 rounded-full font-mono font-medium border border-frosted-glass/50">
                   Orientación Guiada
                 </span>
               </div>
-              <h3 className="font-serif text-2xl text-forest font-normal">
+              <h3 className="font-serif text-2xl text-forest-depths font-light tracking-tight">
                 Comprender y cuidar
               </h3>
-              <p className="font-sans text-sm text-midnight-muted leading-relaxed">
+              <p className="font-sans text-sm text-pewter leading-relaxed">
                 Accede a una biblioteca de materiales psicoeducativos curados para
                 profundizar en descanso, gestión del estrés y autocuidado con
                 fundamento contrastado y lenguaje cercano.
               </p>
             </div>
-            <div className="pt-5 border-t border-sage/20 mt-6 flex items-center gap-2 text-xs uppercase tracking-wider text-forest font-semibold">
-              <span className="p-1 rounded-md bg-sage-subtle group-hover:bg-forest/10 transition-colors">
-                <BookOpen className="h-4 w-4 text-forest group-hover:rotate-6 transition-transform motion-reduce:transform-none" />
-              </span>
-              <span>Recursos psicoeducativos</span>
+            <div className="pt-5 border-t border-warm-stone mt-6 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-forest-depths font-medium font-mono">
+                <span className="p-1.5 rounded-full bg-warm-stone">
+                  <BookOpen className="h-3.5 w-3.5 text-forest-depths" />
+                </span>
+                <span>Recursos psicoeducativos</span>
+              </div>
+              <a
+                href="#comenzar"
+                className="inline-flex items-center gap-1 text-xs font-mono uppercase tracking-wider text-forest-depths border-b-[1.5px] border-forest-depths pb-0.5 hover:opacity-75 transition-opacity"
+              >
+                <span>Acceder</span>
+                <span>→</span>
+              </a>
             </div>
           </div>
         </Reveal>
